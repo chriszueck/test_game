@@ -1,0 +1,12 @@
+bestAlt=41.50
+bestTime=0.00
+wins=0
+totFalls=18
+totVaults=160
+resume=1
+px=14.42
+py=0.90
+pz=89.55
+yaw=-95.1779
+pitch=-0.3868
+time=842.47
