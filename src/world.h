@@ -168,8 +168,8 @@ static void addMote(Vector3 p, Color c, float r, float spd){ gMotes.push_back({p
 static void addUpdraft(Vector3 base, float rad, float hgt, float str=32.0f){
     gUpdrafts.push_back({base, rad, hgt, str});
 }
-static void addWindmill(Vector3 pos, float rad, float tilt, float spd, int blades, Color col){
-    gWindmills.push_back({pos, rad, tilt, spd, blades, col});
+static void addWindmill(Vector3 pos, float rad, float tilt, float spd, int blades, Color col, int hazard=0){
+    gWindmills.push_back({pos, rad, tilt, spd, blades, col, hazard});
 }
 static void addStreamer(Vector3 top, float len, float w, Color col){
     gBanners.push_back({top, len, w, col, frnd(0,6.283f)});
@@ -714,14 +714,18 @@ static void BuildSporeway(void){
         addCoin(x, top+1.3f, z);
     };
 
-    // ---- section A: island-hop warmup - a tight chain of floating isles you
-    //      sprint-vault across (~11 m gaps). No clutter, reds below catch falls.
+    // ---- section A: the BOUNCE run. The islands sit far apart - you must
+    //      vault off one, DROP onto the red trampolines floating in the gap,
+    //      and ride the boings across to the next. No standing on the reds.
     island(-90, 40,  3.0f, 5.0f);                  // mound off the meadow
     island(-77, 40,  6.0f, 4.5f);                  // I0
-    island(-66, 41,  9.5f, 3.8f);                  // A1
-    island(-55, 40, 12.5f, 4.0f);                  // I1
-    island(-44, 42, 15.5f, 3.8f);                  // A2
-    island(-33, 44, 18.5f, 3.6f);                  // I2
+    island(-55, 40, 10.0f, 4.0f);                  // I1
+    island(-32, 44, 15.0f, 3.6f);                  // I2
+    addCap(-70, 40,  4.0f, 4.0f, true);            // gap I0->I1: two red trampolines
+    addCap(-62, 41,  4.0f, 4.0f, true);
+    addCap(-47, 42,  5.0f, 4.0f, true);            // gap I1->I2: two more
+    addCap(-40, 43,  5.0f, 4.0f, true);
+    addCoin(-66, 8.0f, 40); addCoin(-44, 9.0f, 42);   // prizes on the bounce line
     // ---- section B: NOW the blooms - two swings, one flight ----------------
     addWebAnchor({-21, 26.0f, 45});
     addWebAnchor({ -8, 30.0f, 43});                //   let go, fall, grab again
@@ -740,22 +744,17 @@ static void BuildSporeway(void){
     // ---- finale: the long swing to the star --------------------------------
     addWebAnchor({-12, 83.0f, 39});
     island(  2, 39, 76.0f, 4.2f);                  // I9 - the star island
-    addCoin(-60, 11.0f, 40); addCoin(-38, 15.0f, 42);   // mid-air prizes over the gaps
     addCoin(-14.5f, 26.0f, 44); addCoin(-12, 72.0f, 39);
 
-    // parachute reds sit in the GAPS between islands (never under one), so a
-    // short vault drops onto a red and bounces you back toward the route.
-    addShroom({-83,0,40}, 6.5f, 4.0f, true);
-    addShroom({-60,0,40}, 6.5f, 4.0f, true);
-    addShroom({-38,0,42}, 6.5f, 4.0f, true);
+    // a couple more red trampolines under the later web lines (bounce bails)
     addShroom({  7,0,47}, 6.0f, 3.6f, true);
+    addShroom({-14,0,44}, 7.0f, 4.0f, true);
 
     // island life: waterfalls spilling into the void, roots, tufted flowers
     {
         struct IslePos { float x, z, top, r; };
         static const IslePos isles[] = {
-            {-90,40,3,5},{-77,40,6,4.5f},{-66,41,9.5f,3.8f},{-55,40,12.5f,4},{-44,42,15.5f,3.8f},
-            {-33,44,18.5f,3.6f},{4,42,22,3.6f},
+            {-90,40,3,5},{-77,40,6,4.5f},{-55,40,10,4},{-32,44,15,3.6f},{4,42,22,3.6f},
             {10,47,32.5f,3.2f},{3,52,43,3.2f},{-24,52,50,3.4f},{-31,46,60.5f,2.6f},
             {-25,39,71,2.6f},{2,39,76,4.2f} };
         for (int i=0;i<11;i++){
@@ -777,7 +776,7 @@ static void BuildSporeway(void){
             }
         }
         // three islands weep thin waterfalls into the sky
-        float wf[3][4] = {{-33,44,18.5f,3.6f},{3,52,43,3.2f},{2,39,76,4.2f}};
+        float wf[3][4] = {{-32,44,15,3.6f},{3,52,43,3.2f},{2,39,76,4.2f}};
         for (int i=0;i<3;i++){
             addDecor(D_CUBE, {wf[i][0]+wf[i][3]*0.55f, wf[i][2]-9.0f, wf[i][1]},
                      {0.35f, 13.0f, 1.1f}, (Color){160,210,250,210});
@@ -1061,73 +1060,102 @@ static void BuildGorge(void){
 // into the blue. The star crowns the great mill.
 static void BuildSkyhaven(void){
     gSpawn = { -64, 2.91f, 0 };
-    gStarP = { 52, 86.6f, 0 };
-    gAirWind = { 5.0f, 0.0f, 1.6f };          // a steady easterly breeze
+    gStarP = { 52, 150.6f, 0 };               // the star now crowns a 150 m tower
+    gAirWind = { 5.5f, 0.0f, 2.4f };          // a stiff easterly with a nagging crosswind
 
     // a soft distant cloud-floor far below (pure decor; falling = respawn)
-    for (int i=0;i<26;i++){
-        float x = frnd(-140,140), z = frnd(-120,120);
+    for (int i=0;i<30;i++){
+        float x = frnd(-160,180), z = frnd(-130,130);
         addDecor(D_SPHERE, {x, -34+frnd(-4,4), z}, {frnd(10,22), frnd(4,8), frnd(10,22)}, C_CLOUD);
     }
 
-    // ---- the rising route: terrace -> vault+sail -> updraft -> soar -> glide
-    addSkyPlat(-64,  0,   2.0f, 6.0f);        // P0 launch terrace
-    addUpdraft({-50,  0,  1.0f}, 5.2f, 22.0f, 34.0f);
-    addSkyPlat(-40,  5,  20.0f, 4.5f);        // P1
-    addUpdraft({-26,  8, 17.0f}, 5.2f, 24.0f, 34.0f);
-    addSkyPlat(-14, 10,  40.0f, 4.0f);        // P2
-    addUpdraft({  0,  4, 36.0f}, 5.6f, 26.0f, 36.0f);
-    addSkyPlat( 12, -2,  60.0f, 4.0f);        // P3
-    addUpdraft({ 26, -6, 55.0f}, 5.2f, 24.0f, 34.0f);
-    addSkyPlat( 38, -8,  74.0f, 4.4f);        // P4 - the final launch
-    // rest / bail platforms (a missed line can still find footing)
-    addSkyPlat(-30,-14,  12.0f, 3.2f);
-    addSkyPlat(  4, 22,  30.0f, 3.4f);        // offset - a crosswind reach
-    addSkyPlat( 30, 15,  50.0f, 3.6f);
-    addSkyPlat(-52, 16,  30.0f, 3.0f);
+    // ---- the long rising route: 12 sky-stone terraces, each smaller & farther.
+    //      Vault off a terrace, sail, catch the gap's updraft, glide to the next.
+    struct SP { float x, z, top, r; };
+    SP route[13] = {
+        {-64,   0,   2.0f, 6.0f},   // P0 launch terrace (big)
+        {-50,  16,  13.0f, 3.4f},   // P1
+        {-38,  -8,  25.0f, 3.2f},   // P2
+        {-25,  16,  37.0f, 3.0f},   // P3
+        {-13,  -6,  49.0f, 3.0f},   // P4
+        { -1,  18,  61.0f, 2.9f},   // P5
+        { 11,  -4,  73.0f, 2.9f},   // P6
+        { 22,  20,  85.0f, 2.8f},   // P7
+        { 33,  -2,  97.0f, 2.8f},   // P8
+        { 22,  30, 109.0f, 2.9f},   // P9  (route bends north toward the mill)
+        { 36,  14, 121.0f, 2.9f},   // P10
+        { 46,  34, 132.0f, 3.0f},   // P11
+        { 40,   8, 143.0f, 3.2f},   // P12 final approach terrace
+    };
+    for (int i=0;i<13;i++) addSkyPlat(route[i].x, route[i].z, route[i].top, route[i].r);
 
-    // ---- the goal: a colossal windmill; the star crowns its hub ------------
-    addCyl({52,0,0}, 4.0f, 82.0f, S_SKYSTONE);            // the great tower
+    // ---- one updraft per gap: each column only reaches the next terrace, so a
+    //      missed column drops you into the blue. They stiffen as you climb.
+    for (int i=0;i<12;i++){
+        float mx = (route[i].x + route[i+1].x)*0.5f;
+        float mz = (route[i].z + route[i+1].z)*0.5f;
+        float bY = route[i].top - 1.0f;
+        float h  = (route[i+1].top - route[i].top) + 12.0f;
+        addUpdraft({mx, bY, mz}, 5.0f, h, 24.0f + i*0.4f);
+    }
+
+    // ---- only TWO bail platforms on the whole ascent (far fewer nets) -------
+    addSkyPlat(-31, -22,  31.0f, 2.6f);
+    addSkyPlat( 30,  38, 100.0f, 2.6f);
+
+    // ---- HAZARD mills: five spinning blade-gates straddle the glide path.
+    //      A blade sweeping through you rips the sail away and bats you down -
+    //      time your pass through the gap between blades, or steer around.
+    struct HZ { float x, z, y, rad, spd; int blades; };
+    HZ haz[5] = {
+        {-31,  4,  40.0f, 7.0f,  58.0f, 3},   // gate guarding P3
+        { -7,  6,  64.0f, 7.0f, -66.0f, 3},   // gate guarding P5
+        { 16,  8,  88.0f, 7.5f,  70.0f, 4},   // gate guarding P7
+        { 27, 14, 112.0f, 7.5f, -74.0f, 3},   // gate guarding P9
+        { 41, 24, 135.0f, 8.0f,  78.0f, 4},   // gate guarding P11
+    };
+    for (int i=0;i<5;i++){
+        addWindmill({haz[i].x, haz[i].y, haz[i].z}, haz[i].rad, frnd(0,6.2f),
+                    haz[i].spd, haz[i].blades, (Color){225,60,45,255}, 1);
+        addDecor(D_CYL, {haz[i].x, haz[i].y-haz[i].rad-6.0f, haz[i].z},
+                 {0.6f, 6.0f, 0.6f}, (Color){120,110,120,255}, TX_STONE);   // stub pylon
+    }
+
+    // ---- the goal: the colossal Skymill; the star crowns its hub -----------
+    addCyl({52,0,0}, 4.5f, 149.0f, S_SKYSTONE);          // the great tower
     for (int b=0;b<4;b++)                                 // buttress fins
-        addDecor(D_CUBE, {52+cosf(b*1.571f)*4.2f, 40, 0+sinf(b*1.571f)*4.2f}, {1.0f,78,1.0f},
+        addDecor(D_CUBE, {52+cosf(b*1.571f)*4.6f, 74, sinf(b*1.571f)*4.6f}, {1.1f,146,1.1f},
                  (Color){214,224,240,255}, TX_SKY);
-    addSkyPlat(52, 0, 82.0f, 5.2f);                       // the crown terrace (walk to the star)
-    addUpdraft({46, 4, 40.0f}, 6.0f, 46.0f, 32.0f);       // the mill's great gust -> the crown
-    addWindmill({52, 76, 0}, 22.0f, 0.0f, 16.0f, 4, (Color){236,74,84,255});   // the great blades
-    addStreamer({52, 84, 0}, 6.0f, 0.7f, C_GOLD);         // pennant at the very top
+    addSkyPlat(52, 0, 149.0f, 5.4f);                     // the crown terrace (walk to the star)
+    addUpdraft({47, 100.0f, 4}, 7.0f, 52.0f, 30.0f);     // the mill's great gust -> the crown
+    addWindmill({52, 140, 0}, 24.0f, 0.0f, 14.0f, 4, (Color){236,74,84,255});   // the great blades
+    addStreamer({52, 148, 0}, 6.0f, 0.7f, C_GOLD);       // pennant at the very top
 
-    // ---- turbine windmills (landmarks that "make" the updrafts) ------------
-    addWindmill({-50, 15, 0},  9.0f, 0.0f, 40.0f, 5, (Color){120,200,120,255});
-    addWindmill({  0, 22, 4}, 11.0f, 0.0f, 32.0f, 4, (Color){250,200,90,255});
-    addWindmill({ 26, 11,-6},  8.0f, 0.0f, 48.0f, 6, (Color){150,190,250,255});
-    addWindmill({-26, 24, 8},  7.5f, 0.0f, 44.0f, 5, (Color){240,150,210,255});
-    // thin support poles under the turbine mills (visual, non-colliding)
-    float tmx[4]={-50,0,26,-26}, tmy[4]={15,22,11,24}, tmz[4]={0,4,-6,8};
-    for (int i=0;i<4;i++) addDecor(D_CYL, {tmx[i],0,tmz[i]}, {0.5f, tmy[i]-2.0f, 0.5f}, (Color){214,224,240,255}, TX_SKY);
+    // ---- decorative turbine mills: the landmarks that "make" the wind ------
+    addWindmill({-58,  26, -8},  9.0f, 0.0f, 40.0f, 5, (Color){120,200,120,255});
+    addWindmill({-20,  58, 24},  8.0f, 0.0f, 34.0f, 4, (Color){250,200,90,255});
+    addWindmill({ 30,  92,-10},  8.5f, 0.0f, 46.0f, 6, (Color){150,190,250,255});
+    addWindmill({ 10, 128, 30},  7.5f, 0.0f, 44.0f, 5, (Color){240,150,210,255});
+    float dmx[4]={-58,-20,30,10}, dmy[4]={26,58,92,128}, dmz[4]={-8,24,-10,30};
+    for (int i=0;i<4;i++)   // short masts hanging just below each hub (not full-height poles)
+        addDecor(D_CYL, {dmx[i], dmy[i]-14.0f, dmz[i]}, {0.5f, 14.0f, 0.5f}, (Color){214,224,240,255}, TX_SKY);
 
-    // ---- streamers, pinwheels, bunting: the wind kingdom flutters ----------
-    struct P { float x,z,top; } plats[9] = {
-        {-64,0,2},{-40,5,20},{-14,10,40},{12,-2,60},{38,-8,74},
-        {-30,-14,12},{4,22,30},{30,15,50},{-52,16,30} };
+    // ---- streamers & pinwheels: the wind kingdom flutters on every terrace --
     Color banC[4] = {{236,74,84,255},{250,200,90,255},{120,200,120,255},{150,190,250,255}};
-    for (int i=0;i<9;i++){
-        addStreamer({plats[i].x+2.6f, plats[i].top+3.2f, plats[i].z}, frnd(2.4f,3.6f), 0.5f, banC[i%4]);
-        addPinwheel({plats[i].x-2.4f, plats[i].top+1.6f, plats[i].z}, 0.7f, frnd(30,60), banC[i%4], C_CREAM);
-        // a little bunting string arcing over the platform
-        for (int k=0;k<5;k++)
-            addDecor(D_CUBE, {plats[i].x-2.0f+k*1.0f, plats[i].top+2.4f-0.3f*sinf(k*0.8f), plats[i].z-2.4f},
-                     {0.16f,0.24f,0.05f}, banC[k%4]);
+    for (int i=0;i<13;i++){
+        addStreamer({route[i].x+route[i].r*0.6f, route[i].top+3.0f, route[i].z}, frnd(2.2f,3.4f), 0.5f, banC[i%4]);
+        addPinwheel({route[i].x-route[i].r*0.6f, route[i].top+1.5f, route[i].z}, 0.7f, frnd(30,60), banC[i%4], C_CREAM);
     }
 
     // ---- dandelion seeds & leaves streaming on the wind (ambient motes) ----
-    for (int i=0;i<10;i++)
-        addMote({frnd(-70,50), frnd(6,80), frnd(-30,30)},
+    for (int i=0;i<14;i++)
+        addMote({frnd(-70,55), frnd(6,150), frnd(-30,40)},
                 (i%2)? (Color){250,250,240,255} : (Color){200,230,180,255}, frnd(3,6), frnd(0.4f,0.9f));
 
     // ---- distant giant windmills on the horizon (silhouette landmarks) -----
-    addWindmill({-150, 40, 90}, 34.0f, 0.0f, 10.0f, 4, (Color){150,170,200,255});
-    addWindmill({ 170, 55,-40}, 40.0f, 0.0f,  8.0f, 5, (Color){150,170,200,255});
-    addCyl({-150,0,90}, 6, 40, S_SKYSTONE); addCyl({170,0,-40}, 7, 55, S_SKYSTONE);
+    addWindmill({-170, 60, 100}, 36.0f, 0.0f, 10.0f, 4, (Color){150,170,200,255});
+    addWindmill({ 190, 90, -50}, 42.0f, 0.0f,  8.0f, 5, (Color){150,170,200,255});
+    addCyl({-170,0,100}, 6, 60, S_SKYSTONE); addCyl({190,0,-50}, 7, 90, S_SKYSTONE);
 
     // warp pipe home, on the launch terrace
     addWarpPipe({-64, 2.0f, -5}, {150,190,250,255});

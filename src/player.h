@@ -441,6 +441,34 @@ static void PlayerUpdate(float dt, bool inputLocked){
             pl.vel.x -= dx*0.9f*dt; pl.vel.z -= dz*0.9f*dt;   // gentle inward pull
         }
     }
+    // ---- SKYHAVEN hazard mills: a sweeping blade rips the sail off and bats you
+    for (auto& w : gWindmills){
+        if (!w.hazard || pl.stunT > 0) continue;
+        float dx = pl.pos.x - w.pos.x;
+        if (fabsf(dx) > 1.7f) continue;                    // only near the spinning plane
+        float dy = pl.pos.y - w.pos.y, dz = pl.pos.z - w.pos.z;
+        float rr = sqrtf(dy*dy + dz*dz);
+        if (rr < 1.0f || rr > w.rad) continue;             // hub gap or outside the blades
+        float pang = atan2f(-dy, dz);                      // your angle on the blade disc
+        float base = (float)GetTime()*w.spd*DEG2RAD + w.tilt;
+        bool hit = false;
+        for (int b=0; b<w.blades && !hit; b++){
+            float d = pang - (base + b*(6.2832f/w.blades));
+            while (d >  PI) d -= 2.0f*PI;
+            while (d < -PI) d += 2.0f*PI;
+            if (fabsf(d) < 0.22f) hit = true;              // a blade is passing through you
+        }
+        if (hit){
+            float nx = dy/rr, nz = dz/rr;                  // fling radially out of the disc
+            pl.vel.y = nx*13.0f - 3.0f;
+            pl.vel.z = pl.vel.z*0.3f + nz*13.0f;
+            pl.vel.x = pl.vel.x*0.3f - 9.0f;               // spun back against the climb
+            pl.sailing = false; pl.sailOpen = 0;           // the canopy collapses
+            pl.stunT = 0.45f;                              // can't re-open the sail at once
+            gShake += 0.8f; pl.rollT = 0;
+            SND(sFoul, 0.8f, 0.65f);
+        }
+    }
     if (!pl.grounded){
         float wk = pl.sailing? SAIL_WINDK : 0.22f;
         pl.vel.x += gAirWind.x*wk*dt; pl.vel.z += gAirWind.z*wk*dt;

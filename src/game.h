@@ -131,7 +131,7 @@ static std::vector<Shrine> gShrines;
 // SKYHAVEN wind kingdom: updraft columns, windmills, banners, ambient wind
 struct Updraft { Vector3 base; float rad, hgt, str; };   // a rising air column
 static std::vector<Updraft> gUpdrafts;
-struct Windmill { Vector3 pos; float rad, tilt, spd; int blades; Color col; };
+struct Windmill { Vector3 pos; float rad, tilt, spd; int blades; Color col; int hazard; };
 static std::vector<Windmill> gWindmills;
 struct Banner { Vector3 top; float len, w; Color col; float phase; };
 static std::vector<Banner> gBanners;

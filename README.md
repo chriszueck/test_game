@@ -59,12 +59,17 @@ bailed into a red mushroom, and every fall goes exactly as far as you earned.
 ### Level 5: SKYHAVEN
 A kingdom of colossal windmills in the open sky, built around the **SKYSAIL**.
 Vault off a terrace, then **hold SHIFT to unfurl a hang-glider**: you glide on
-the wind (which pushes every flight eastward), **W** tucks into a dive for
-speed, **S** flares to brake, **A/D** steer. Sail into a swirling **updraft**
-and it catapults you skyward. The loop: vault → sail → catch the lift → line up
-the next terrace → land. Miss your line and the wind carries you into the blue.
-The star crowns the great mill — ride its gust up to claim it. Reach it via the
-flagged warp pipe (the pipes now cycle all five worlds).
+the wind (a stiff easterly with a nagging crosswind that pushes every flight),
+**W** tucks into a dive for speed, **S** flares to brake, **A/D** steer. Sail
+into a swirling **updraft** and it lifts you — but each column only reaches the
+next terrace, so miss it and you sink into the blue. The loop: vault → sail →
+catch the lift → line up the next terrace → land. **Twelve** terraces climb
+150 m, each smaller and farther than the last, and five spinning **blade-gates**
+(the red mills) straddle the route — a blade sweeping through you rips the sail
+away and bats you down, so time your pass through the gap between blades. Only
+two bail platforms on the whole ascent. The star crowns the great mill — ride
+its gust up to claim it. Reach it via the flagged warp pipe (the pipes now
+cycle all five worlds).
 
 ### Level 4: THE GORGE
 The longest and hardest climb: a quarried canyon of strata, pines, hanging
@@ -77,9 +82,12 @@ the final move is a vault over a lone red cap into a perfect slam — the
 boing carries you through the star. No nets. The floor remembers.
 
 ### Level 3: THE SPOREWAY
-Floating islands strung across the sky — and the **web blooms are the
-bridges**: vault off an island's edge, grab mid-air, ride the pendulum, and
-release on the upswing. One gap takes two blooms in a single flight. New
+Floating islands strung across the sky. It opens with a **bounce run**: the
+first islands sit too far to vault across, so you launch into the gap, **drop
+onto the red trampolines** floating there, and ride the boings to the next
+island — no standing on the reds. Then the **web blooms become the bridges**:
+vault off an island's edge, grab mid-air, ride the pendulum, and release on the
+upswing. One gap takes two blooms in a single flight. New
 here: **golden spores** turbo-charge your pole for seven seconds — the
 double-height island hops they unlock must be chained before the glow fades
 (the ring around your crosshair is the timer). Spores regrow, falls land in

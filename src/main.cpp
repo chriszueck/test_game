@@ -274,14 +274,23 @@ static void DrawUnlockOrb(const Camera3D& cam){
 static void DrawWindmills(float t){
     for (auto& w : gWindmills){
         float ang = t*w.spd*DEG2RAD + w.tilt;
-        drawM(gSphere, w.pos, {w.rad*0.14f, w.rad*0.14f, w.rad*0.14f}, ctint(w.col,0.75f), TX_STONE);
+        Color hub = ctint(w.col,0.75f);
+        if (w.hazard){                                         // danger: a pulsing red hub
+            float pu = 0.6f + 0.4f*sinf(t*6.0f);
+            hub = (Color){(unsigned char)(40+200*pu), 28, 24, 255};
+            drawM(gSphere, w.pos, {w.rad*0.22f, w.rad*0.22f, w.rad*0.22f},
+                  (Color){235,70,50,(unsigned char)(70+90*pu)}, TX_WHITE);   // warning glow
+        }
+        drawM(gSphere, w.pos, {w.rad*0.14f, w.rad*0.14f, w.rad*0.14f}, hub, TX_STONE);
         for (int i=0;i<w.blades;i++){
             float a = ang + i*(6.2832f/w.blades);
             Vector3 dir = {0, -sinf(a), cosf(a)};              // Y-Z plane: faces along X (the travel axis)
             Vector3 mid = w.pos + dir*(w.rad*0.52f);
-            drawM(gCube, mid, {0.12f, w.rad*0.32f, w.rad*1.04f}, (i%2)? w.col : ctint(w.col,1.12f),
+            Color sail = w.hazard? ((i%2)? (Color){222,54,40,255} : (Color){250,120,64,255})
+                                 : ((i%2)? w.col : ctint(w.col,1.12f));
+            drawM(gCube, mid, {0.12f, w.rad*0.32f, w.rad*1.04f}, sail,
                   TX_CLOTH, (Vector3){1,0,0}, a*RAD2DEG);        // cloth sail
-            drawCylBetween(w.pos, w.pos + dir*w.rad, w.rad*0.04f, C_WOOD);    // spar
+            drawCylBetween(w.pos, w.pos + dir*w.rad, w.rad*0.04f, w.hazard? (Color){60,20,20,255} : C_WOOD);
         }
     }
 }
@@ -699,19 +708,19 @@ static void DrawHUD(float t){
     }
     if (gOnWarp && !gWon){
         float p = 0.7f + 0.3f*sinf((float)GetTime()*6.0f);
-        static const char* worlds[4] = {"Castle", "Megashroom", "Sporeway", "Gorge"};
-        int panelW = 460, panelH = 208, px = W/2 - panelW/2, py = H/2 + 44;
+        static const char* worlds[5] = {"Castle", "Megashroom", "Sporeway", "Gorge", "Skyhaven"};
+        int panelW = 460, panelH = 236, px = W/2 - panelW/2, py = H/2 + 40;
         DrawRectangleRounded((Rectangle){(float)px,(float)py,(float)panelW,(float)panelH}, 0.10f, 8, (Color){18,26,20,225});
         DrawRectangleRoundedLinesEx((Rectangle){(float)px,(float)py,(float)panelW,(float)panelH}, 0.10f, 8, 3,
                                     (Color){140,235,140,(unsigned char)(255*p)});
         drawTextC("WARP  ·  travel to any world", W/2, py+16, 22, (Color){140,235,140,255});
-        for (int i=0;i<4;i++){
+        for (int i=0;i<5;i++){
             bool here = (i == gLevel);
             Color c = here? (Color){120,180,120,200} : (Color){245,250,240,255};
             drawTextC(TextFormat("[%d]   %s%s", i+1, worlds[i], here? "   (you are here)" : ""),
                       W/2, py+52+i*28, 20, c);
         }
-        drawTextC("press a number  ·  or walk off to stay", W/2, py+178, 17, (Color){200,220,200,220});
+        drawTextC("press a number  ·  or walk off to stay", W/2, py+206, 17, (Color){200,220,200,220});
     }
     if (gMuted) drawTextSh("[M] sound off", 16, H-32, 17, (Color){255,255,255,130});
     drawTextSh(TextFormat("%d fps", GetFPS()), W-86, H-32, 17, (Color){255,255,255,140});
@@ -836,11 +845,11 @@ static void ShotMode(void){
         {{2,79.0f,224},     0,   4, 0,     "shotG5.png"},   // crown: the star pinnacle
     };
     static const Preset sky2[5] = {
-        {{-64,3.91f,0},    75,  6, 0,      "shotK1.png"},   // launch terrace, route ahead
-        {{-40,21.91f,5},   80, 10, 0,      "shotK2.png"},   // updrafts + turbine windmills
-        {{-14,41.91f,10},  90,  8, 0,      "shotK3.png"},   // mid-climb over the sky
-        {{20,60.0f,-4},    70, 12, 0,      "shotK4.png"},   // toward the great mill
-        {{40,80.0f,0},     90,  2, 0,      "shotK5.png"},   // the great mill + star crown
+        {{-64, 3.91f, 0},   75,  8, 0,     "shotK1.png"},   // launch terrace, route climbing east
+        {{-40, 40.0f,-8},   78,  6, 0,     "shotK2.png"},   // a red hazard blade-gate + updraft
+        {{ 11, 76.0f,-4},   80,  6, 0,     "shotK3.png"},   // mid-climb over the blue
+        {{ 33,100.0f,-2},   62, 12, 0,     "shotK4.png"},   // the colossal Skymill ahead
+        {{ 40,146.0f, 8},  118,  6, 0,     "shotK5.png"},   // the star crowning the great mill
     };
     const Preset* P = (gLevel==4)? sky2 : (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
     int n = (gLevel==2)? 4 : (gLevel==1)? 4 : 5;
@@ -896,7 +905,7 @@ static void DemoMode(void){
         if (!sailPhase && T > 15.4f){    // phase 7: SKYHAVEN sail + updraft (drop into a column)
             sailPhase = true;
             BuildWorld(4); gUnlockSail = true;
-            pl = Player(); pl.pos = {-50, 6.0f, 0}; pl.vel = {0,-4,0}; pl.yaw = 1.4f;  // over updraft U0
+            pl = Player(); pl.pos = {-57, 7.0f, 8}; pl.vel = {0,-4,0}; pl.yaw = 1.4f;  // over updraft U0 (gap P0->P1)
         }
         gBotSail = (T > 15.45f && T < 17.6f);    // hold the sail: should RISE in the column, then glide
         PlayerUpdate(dt, false);
@@ -957,8 +966,8 @@ static Trig gTrigsTower[] = {
     {140.0f,"The crown. Don't look down. (Look down.)", false},
 };
 static Trig gTrigsSky[] = {
-    { 4.5f, "THE SPOREWAY. Sprint-vault the chain of floating islands.", false},
-    { 8.5f, "Reds wait in the gaps - a short jump lands and bounces you onward.", false},
+    { 4.5f, "THE SPOREWAY. Islands sit far apart - DROP onto the red trampolines to cross.", false},
+    { 8.5f, "Vault high, fall onto a red, ride the boing to the next island.", false},
     {18.0f, "NOW the blooms: vault off, grab RMB mid-air, release on the upswing.", false},
     {24.0f, "GOLDEN SPORES turbo-charge the pole. They fade fast - chain the jumps!", false},
     {48.0f, "Spore, vault, land, TURN, vault. No dawdling.", false},
@@ -1124,7 +1133,8 @@ int main(int argc, char** argv){
                     if (IsKeyPressed(KEY_TWO))   pick = 1;
                     if (IsKeyPressed(KEY_THREE)) pick = 2;
                     if (IsKeyPressed(KEY_FOUR))  pick = 3;
-                    if (IsKeyPressed(KEY_ENTER)) pick = (gLevel + 1) % 4;
+                    if (IsKeyPressed(KEY_FIVE))  pick = 4;
+                    if (IsKeyPressed(KEY_ENTER)) pick = (gLevel + 1) % 5;
                     if (pick >= 0 && pick != gLevel) GoToLevel(pick);
                 }
             }
