@@ -1,5 +1,5 @@
 // ============================================================================
-// ShroomVault — a foddian first-person pole-vault ascent (C++ / raylib)
+// ShroomVault - a foddian first-person pole-vault ascent (C++ / raylib)
 // main.cpp : particles, HUD, messages, save file, main loop
 // ============================================================================
 #include "game.h"
@@ -65,7 +65,7 @@ static void ConfettiTick(void){
     static const Color cc[5] = {{235,55,40,255},{253,192,40,255},{80,220,100,255},{90,160,255,255},WHITE};
     if (gParts.size() < 650)
         for (int i=0;i<5;i++)
-            spawnPart(STAR_POS + (Vector3){frnd(-1,1),frnd(-0.5f,1),frnd(-1,1)},
+            spawnPart(gStarP + (Vector3){frnd(-1,1),frnd(-0.5f,1),frnd(-1,1)},
                       {frnd(-6,6), frnd(1,7), frnd(-6,6)},
                       frnd(1.8f,3.0f), 0.14f, -8.0f, cc[GetRandomValue(0,4)]);
 }
@@ -108,6 +108,184 @@ static void UpdateCoins(float dt){
     }
 }
 
+// ------------------------------------------------------------ spores -------
+static void UpdateSpores(float dt){
+    if (gBoostT > 0){
+        gBoostT -= dt;
+        if (gBoostT <= 0){ gBoostT = 0; SND(sWhiff, 0.65f, 0.55f); }   // the glow fades
+        else {                                                          // golden trail
+            static float trailT = 0; trailT -= dt;
+            if (trailT <= 0){ trailT = 0.07f;
+                spawnPart(pl.pos + (Vector3){frnd(-0.3f,0.3f),frnd(-0.8f,0.1f),frnd(-0.3f,0.3f)},
+                          {frnd(-0.5f,0.5f), frnd(-0.5f,0.5f), frnd(-0.5f,0.5f)},
+                          0.4f, 0.11f, 0.5f, (Color){255,214,70,255});
+            }
+        }
+    }
+    for (auto& sp : gSpores){
+        sp.cd = fmaxf(0.0f, sp.cd - dt);
+        if (sp.cd > 0) continue;
+        float dx = pl.pos.x-sp.p.x, dy = pl.pos.y-sp.p.y, dz = pl.pos.z-sp.p.z;
+        if (dx*dx+dz*dz < 1.7f*1.7f && fabsf(dy) < 2.0f){
+            sp.cd = SPORE_CD;
+            gBoostT = BOOST_DUR;
+            SND(sBoing, 1.9f, 0.7f); SND(sDing, 0.85f, 0.7f);
+            SpawnSparkle(sp.p, 16);
+            gShake += 0.10f;
+            static bool tip = false;
+            if (!tip){ tip = true; MSG("SPORE POWER! Your pole is supercharged - GO GO GO!", 3.5f); }
+        }
+    }
+}
+static void DrawSpores(float t){
+    for (auto& sp : gSpores){
+        if (sp.cd > 0){        // spent: dim husk regrowing
+            float k = 1.0f - sp.cd/SPORE_CD;
+            drawM(gSphere, sp.p, {0.16f+0.14f*k, 0.16f+0.14f*k, 0.16f+0.14f*k},
+                  (Color){150,140,90,255}, TX_WHITE);
+            continue;
+        }
+        float pulse = 0.42f + 0.07f*sinf(t*5.0f + sp.p.x);
+        drawM(gSphere, sp.p, {pulse,pulse,pulse}, (Color){255,208,52,255}, TX_WHITE);
+        drawM(gSphere, sp.p, {pulse*0.55f,pulse*0.55f,pulse*0.55f}, (Color){255,244,170,255}, TX_WHITE);
+        for (int k=0;k<4;k++){ // petals
+            float a = t*1.2f + k*1.5708f;
+            drawM(gSphere, sp.p + (Vector3){cosf(a)*0.5f, -0.08f, sinf(a)*0.5f},
+                  {0.16f,0.05f,0.16f}, (Color){250,250,245,255}, TX_WHITE);
+        }
+    }
+}
+
+// ------------------------------------------------------ shrines & unlocks --
+static void SaveGame(void);
+static const char* gUnlockName = "";
+static const char* gUnlockSub = "";
+static bool gOnWarp = false;       // standing on a warp pipe mouth
+// ---- cinematic ability unlock (the shrine blooms; power flows into you) ----
+static const float CINE_DUR = 3.8f;
+static float   gUnlockCine = 0;    // counts down while the unlock cinematic plays
+static int     gUnlockCineType = 0;
+static Vector3 gUnlockCinePos = {0,0,0};
+static void UpdateShrines(void){
+    if (gUnlockCine > 0) return;   // one at a time
+    for (auto& sh : gShrines){
+        bool owned = (sh.type == 0)? gUnlockWeb : gUnlockSlam;
+        if (owned) continue;
+        float dx = pl.pos.x-sh.p.x, dy = pl.pos.y-sh.p.y, dz = pl.pos.z-sh.p.z;
+        if (dx*dx+dz*dz < 2.6f*2.6f && fabsf(dy) < 2.6f){
+            if (sh.type == 0){
+                gUnlockWeb = true;
+                gUnlockName = "WEB SWING";
+                gUnlockSub  = "hold RMB near a glowing bloom - release to fly";
+            } else {
+                gUnlockSlam = true;
+                gUnlockName = "THE SLAM";
+                gUnlockSub  = "SHIFT mid-air to dive - slam a red cap at the last blink";
+            }
+            gUnlockCine = CINE_DUR; gUnlockCineType = sh.type; gUnlockCinePos = sh.p;
+            gUnlockT = (sh.type == 0)? 5.2f : 0.0f;   // web: the distant blooms flare awake
+            SND(sPop, 0.5f, 0.7f);              // a low awakening hum
+            SaveGame();
+        }
+    }
+}
+static void DrawShrines(float t){
+    for (auto& sh : gShrines){
+        bool owned  = (sh.type == 0)? gUnlockWeb : gUnlockSlam;
+        Color core   = (sh.type == 0)? (Color){130,225,255,255} : (Color){255,110,80,255};
+        Color petalA = (sh.type == 0)? (Color){120,210,255,255} : (Color){255,120,70,255};
+        Color petalB = (sh.type == 0)? (Color){178,155,255,255} : (Color){255,190,90,255};
+        // bloom: 0 = closed bud, 1 = fully open. Ramps open during the cinematic.
+        float bloom = 0.0f;
+        bool cineHere = (gUnlockCine > 0 && Vector3Distance(sh.p, gUnlockCinePos) < 0.6f);
+        if (cineHere) bloom = clampf((CINE_DUR - gUnlockCine)/1.5f, 0, 1);
+        else if (owned) bloom = 1.0f;
+        float breathe = 1.0f + 0.06f*sinf(t*2.2f);
+        float glow = 0.55f + 0.45f*sinf(t*3.1f) + bloom*0.7f + (cineHere?1.0f:0.0f);
+        // stem + green calyx (sepals cupping the bud)
+        drawM(gCyl, sh.p + (Vector3){0,-1.35f,0}, {0.18f,0.95f,0.18f}, (Color){96,150,84,255}, TX_FIBER);
+        for (int k=0;k<5;k++){
+            float a = k*1.257f;
+            drawM(gSphere, sh.p + (Vector3){cosf(a)*0.34f,-0.30f,sinf(a)*0.34f}, {0.15f,0.30f,0.15f},
+                  (Color){84,140,72,255}, TX_FIBER);
+        }
+        // petals: unfurl from closed (upright, hugging the core) to open (spread, drooping)
+        for (int k=0;k<6;k++){
+            float az = k*1.047f + t*0.12f;
+            float tilt = (14.0f + bloom*82.0f)*DEG2RAD;
+            float reach = (0.30f + bloom*0.78f)*breathe;
+            float hy = 0.42f - bloom*0.62f;
+            Vector3 pos = sh.p + (Vector3){cosf(az)*sinf(tilt)*reach, hy, sinf(az)*sinf(tilt)*reach};
+            drawM(gSphere, pos, {0.14f+bloom*0.07f, 0.36f-bloom*0.18f, 0.14f+bloom*0.07f},
+                  ctint((k%2)? petalA : petalB, 0.85f+0.15f*(k%2)), TX_STREAK);
+        }
+        // glowing crystal core (rises + brightens as it opens)
+        float cy = 0.28f + bloom*0.42f;
+        drawM(gSphere, sh.p+(Vector3){0,cy,0}, {0.16f*glow+0.13f,0.22f*glow+0.15f,0.16f*glow+0.13f}, core, TX_WHITE);
+        drawM(gCone,   sh.p+(Vector3){0,cy+0.14f,0}, {0.13f,0.36f,0.13f}, ctint(core,1.15f), TX_WHITE);
+        drawM(gSphere, sh.p+(Vector3){0,cy,0}, {0.075f,0.09f,0.075f}, WHITE, TX_WHITE);
+        // two counter-rotating rune rings (ornate)
+        for (int r=0;r<2;r++){
+            float rr = 0.72f + r*0.26f;
+            for (int s=0;s<10;s++){
+                float a = t*(r? -0.8f:1.1f) + s*0.6283f;
+                drawM(gCube, sh.p+(Vector3){cosf(a)*rr, 0.08f+r*0.18f+0.06f*sinf(t*2.0f+s), sinf(a)*rr},
+                      {0.05f,0.05f,0.13f}, ctint(core,0.9f), TX_WHITE, {0,1,0}, a*RAD2DEG);
+            }
+        }
+        // orbiting gold seeds
+        for (int k=0;k<4;k++){
+            float a = t*1.6f + k*1.571f;
+            drawM(gSphere, sh.p+(Vector3){cosf(a)*1.28f, 0.2f+sinf(t*2.2f+k)*0.35f, sinf(a)*1.28f},
+                  {0.09f,0.09f,0.09f}, C_GOLD, TX_WHITE);
+        }
+        // beacon pillar — bright while dormant, fades as it blooms
+        if (bloom < 0.6f){
+            float b = 1.0f - bloom/0.6f;
+            DrawCylinder((Vector3){sh.p.x, sh.p.y+42, sh.p.z}, 0.9f, 1.7f, 84, 14,
+                         (Color){core.r,core.g,core.b,(unsigned char)((36+22*glow)*b)});
+            DrawCylinder((Vector3){sh.p.x, sh.p.y+42, sh.p.z}, 0.32f, 0.55f, 84, 10,
+                         (Color){255,255,255,(unsigned char)((28+16*glow)*b)});
+        }
+    }
+}
+// the energy orb of the cinematic: rises from the bloomed bud, then streaks in
+static void DrawUnlockOrb(const Camera3D& cam){
+    if (gUnlockCine <= 0) return;
+    float el = CINE_DUR - gUnlockCine;
+    Color oc = gUnlockCineType? (Color){255,140,90,255} : (Color){150,225,255,255};
+    Vector3 fwd = Vector3Normalize(cam.target - cam.position);
+    if (el < 1.9f){                               // gathering + rising from the core
+        float rise = clampf(el/1.5f, 0, 1);
+        Vector3 op = gUnlockCinePos + (Vector3){0, 0.8f + rise*1.7f, 0};
+        float s = 0.18f + 0.30f*rise + 0.06f*sinf(el*12.0f);
+        drawM(gSphere, op, {s*1.7f,s*1.7f,s*1.7f}, (Color){oc.r,oc.g,oc.b,90}, TX_WHITE);
+        drawM(gSphere, op, {s,s,s}, oc, TX_WHITE);
+        drawM(gSphere, op, {s*0.5f,s*0.5f,s*0.5f}, WHITE, TX_WHITE);
+    } else if (el < 2.25f){                        // streaks into the camera (the power enters you)
+        float k = (el-1.9f)/0.35f;
+        Vector3 op = Vector3Lerp(gUnlockCinePos+(Vector3){0,2.5f,0}, cam.position + fwd*0.9f, k*k);
+        float s = 0.5f*(1.0f-k)+0.12f;
+        drawM(gSphere, op, {s*1.8f,s*1.8f,s*1.8f}, (Color){oc.r,oc.g,oc.b,120}, TX_WHITE);
+        drawM(gSphere, op, {s,s,s}, WHITE, TX_WHITE);
+    }
+}
+// ambient motes: butterflies / petals / fireflies wandering their anchors
+static void DrawMotes(float t){
+    for (size_t i=0;i<gMotes.size();i++){
+        const Mote& m = gMotes[i];
+        float dx = m.p.x-pl.pos.x, dz = m.p.z-pl.pos.z;
+        if (dx*dx+dz*dz > 100*100) continue;
+        for (int k=0;k<3;k++){
+            float ph = t*m.spd + (float)i*2.13f + k*2.09f;
+            Vector3 p = { m.p.x + sinf(ph)*m.r + sinf(ph*2.37f)*0.5f,
+                          m.p.y + sinf(ph*0.63f + k)*m.r*0.45f,
+                          m.p.z + cosf(ph*0.81f)*m.r };
+            drawM(gSphere, p, {0.085f,0.085f,0.085f}, m.c, TX_WHITE);
+        }
+    }
+}
+
 // ------------------------------------------------------------ wind streaks -
 struct Streak { Vector3 p, v; float life, maxLife; };
 static std::vector<Streak> gStreaks;
@@ -134,6 +312,7 @@ static void DrawStreaks(void){
 // ---------------------------------------------------------------- FX hooks -
 void FX_Land(Vector3 pos, float impact){
     SND(sLand, clampf(1.05f-impact*0.006f, 0.55f, 1.05f), clampf(0.25f+impact*0.02f, 0, 1));
+    if (impact > 16.0f) SND(sThud, 1.0f, clampf(impact/34.0f, 0.4f, 1.0f));   // big drop: body thud
     SpawnDust((Vector3){pos.x, pos.y-PLAYER_HH, pos.z}, (int)clampf(4+impact*0.3f,4,16), {168,140,100,255});
     gShake += clampf(impact*0.015f, 0.0f, 0.45f);
 }
@@ -143,17 +322,24 @@ void FX_Bounce(Vector3 pos, float speed){
     SpawnDust((Vector3){pos.x, pos.y-PLAYER_HH, pos.z}, 8, WHITE);
     SpawnSparkle((Vector3){pos.x, pos.y-PLAYER_HH, pos.z}, 5);
     static bool tip = false;
-    if (!tip){ tip = true; MSG("Boing! Red caps bounce you — aim for them when you fall.", 5.0f); }
+    if (!tip){ tip = true; MSG("Boing! Red caps bounce you - aim for them when you fall.", 5.0f); }
 }
 static float gPerfT = 0;
+void FX_Plant(Vector3 plantPos, float charge, bool perfect){
+    SND(sPlant, 0.96f + 0.06f*charge + (perfect?0.03f:0.0f), 0.78f + 0.12f*charge);
+    SND(sPlant, 0.58f, 0.45f + 0.2f*charge);       // low creak: the pole loading up
+    SpawnDust(plantPos, 6 + (int)(charge*6), {188,152,92,255});
+    SpawnSparkle(plantPos, perfect ? 6 : 3);
+    gShake += 0.05f + 0.07f*charge + (perfect?0.08f:0.0f);
+}
 void FX_Vault(Vector3 plantPos, float charge, bool perfect){
-    SND(sPlant, 1.0f, 0.9f);
-    SND(sWhoosh, 0.75f+0.5f*charge, 0.45f+0.5f*charge);
-    SpawnDust(plantPos, 6+(int)(charge*8), {180,150,105,255});
-    gShake += 0.12f + 0.15f*charge + (perfect? 0.20f : 0.0f);
+    SND(sWhoosh, 0.80f + 0.40f*charge + (perfect?0.06f:0.0f), 0.55f + 0.45f*charge);
+    SND(sBoing, 1.75f, 0.30f);                     // fiberglass twang on release
+    SpawnDust(plantPos, 4+(int)(charge*5), {210,180,125,255});
+    gShake += 0.10f + 0.15f*charge + (perfect?0.20f:0.0f);
     if (perfect){
         gPerfT = 0.8f;
-        SND(sDing, 1.5f, 0.85f);
+        SND(sPerfect, 1.0f, 0.95f);            // its own fanfare, not just a ding
         SpawnSparkle(plantPos, 14);
     }
     gTotVaults++;
@@ -182,6 +368,7 @@ void FX_BigFall(float m){
         "A %d m tumble. Gravity remains undefeated.",
         "%d m gone. Breathe. Vault again." };
     MSG(TextFormat(lines[(i++)%5], (int)m), 4.0f);
+    gMusicDuck = 0.10f;                  // the band stops. everyone saw that.
     gTotFalls++;
 }
 void FX_Bump(Vector3 pos, int surf){
@@ -194,6 +381,34 @@ void FX_QCoin(Vector3 blockTop){
     SND(sDing, 1.45f, 0.7f);
     SpawnSparkle(blockTop, 10);
 }
+static float gSlamMsgT = 0;
+void FX_Slam(){
+    SND(sWhoosh, 0.52f, 0.85f);                    // the tuck: a low dive-roar
+    pl.fovKick = -7.0f;                            // zoom in - commitment
+    gShake += 0.06f;
+}
+void FX_SlamHit(Vector3 pos, bool perfect, float outVel){
+    if (perfect){
+        SND(sBoing, 0.62f, 1.0f);                  // deep mega-boing
+        SND(sPerfect, 0.70f, 0.55f);
+        gSlamMsgT = 0.8f;
+        gShake += 0.45f;
+        gHitstop = fmaxf(gHitstop, 0.08f);
+        for (int i=0;i<16;i++){                    // shock ring
+            float a = i*0.3927f;
+            spawnPart((Vector3){pos.x+cosf(a)*0.8f, pos.y-PLAYER_HH, pos.z+sinf(a)*0.8f},
+                      {cosf(a)*7.0f, 1.5f, sinf(a)*7.0f}, 0.5f, 0.16f, -4.0f, WHITE);
+        }
+        SpawnSparkle((Vector3){pos.x, pos.y-PLAYER_HH, pos.z}, 10);
+    } else {
+        SND(sBoing, 0.82f, 0.95f);
+        gShake += 0.28f;
+        SpawnDust((Vector3){pos.x, pos.y-PLAYER_HH, pos.z}, 10, WHITE);
+    }
+    static bool tip = false;
+    if (!tip){ tip = true; MSG("SLAM BOUNCE! The later you press, the bigger the boing.", 4.5f); }
+    (void)outVel;
+}
 void FX_Win(){
     SND(sWin, 1.0f, 0.95f);
     MSG("* YOU VAULTED THE CASTLE! *", 6.0f);
@@ -203,9 +418,11 @@ void FX_Win(){
 static void SaveGame(void){
     char buf[512];
     snprintf(buf, sizeof(buf),
-        "bestAlt=%.2f\nbestTime=%.2f\nwins=%d\ntotFalls=%d\ntotVaults=%d\n"
+        "bestAlt=%.2f\nbestTime=%.2f\nwins=%d\ntotFalls=%d\ntotVaults=%d\nlevel=%d\n"
+        "uweb=%d\nuslam=%d\n"
         "resume=%d\npx=%.2f\npy=%.2f\npz=%.2f\nyaw=%.4f\npitch=%.4f\ntime=%.2f\n",
-        gBestEver, gBestTime, gWins, gTotFalls, gTotVaults,
+        gBestEver, gBestTime, gWins, gTotFalls, gTotVaults, gLevel,
+        gUnlockWeb?1:0, gUnlockSlam?1:0,
         gWon? 0:1, pl.pos.x, pl.pos.y, pl.pos.z, pl.yaw, pl.pitch, gTime);
     SaveFileText(gSavePath, buf);
 }
@@ -215,6 +432,18 @@ static float readKey(const char* txt, const char* key, float def){
     if (!p) return def;
     return (float)atof(p + strlen(pat));
 }
+// Deterministic per-world unlocks so the shrine CINEMATICS re-arm every fresh
+// visit (that's the whole point of them). The Megashroom earns web at its
+// Weaver's Bloom; the Gorge earns slam at its Thunder Shrine. The Sporeway &
+// Gorge are simply handed web (their teacher lives back in the Megashroom).
+// A mid-level RESUME keeps what you'd already earned so you're never stranded
+// above a shrine. resumeY < 0 means a fresh entry (warp / new run).
+static void SetLevelUnlocks(float resumeY){
+    bool pastWeb  = (gLevel == 1 && resumeY > 68.0f);   // resumed above the Weaver's Bloom
+    bool pastSlam = (gLevel == 3 && resumeY >  6.0f);   // resumed up a Gorge shaft, past the mouth
+    gUnlockWeb  = (gLevel == 2 || gLevel == 3) || pastWeb;
+    gUnlockSlam = pastSlam;
+}
 static void LoadSave(void){
     char* txt = LoadFileText(gSavePath);
     if (!txt) return;
@@ -223,13 +452,21 @@ static void LoadSave(void){
     gWins      = (int)readKey(txt,"wins",0);
     gTotFalls  = (int)readKey(txt,"totFalls",0);
     gTotVaults = (int)readKey(txt,"totVaults",0);
-    if (readKey(txt,"resume",0) > 0.5f){
-        pl.pos = { readKey(txt,"px",SPAWN_POS.x), readKey(txt,"py",SPAWN_POS.y), readKey(txt,"pz",SPAWN_POS.z) };
+    int lv = (int)readKey(txt,"level",0);
+    if (lv >= 1 && lv <= 3 && gLevel != lv){
+        BuildWorld(lv);                               // resume on the saved level
+        pl.pos = gSpawn;
+    }
+    bool resuming = readKey(txt,"resume",0) > 0.5f;
+    float resumeY = resuming? readKey(txt,"py",gSpawn.y) : -1.0f;
+    SetLevelUnlocks(resumeY);                         // shrines re-arm unless you resumed past them
+    if (resuming){
+        pl.pos = { readKey(txt,"px",gSpawn.x), readKey(txt,"py",gSpawn.y), readKey(txt,"pz",gSpawn.z) };
         pl.yaw = readKey(txt,"yaw",0); pl.pitch = clampf(readKey(txt,"pitch",0.05f), -1.55f, 1.55f);
         gTime = fmaxf(0.0f, readKey(txt,"time",0));
         gTimerStarted = gTime > 0.01f;
         if (pl.pos.y < 0.85f || fabsf(pl.pos.x) > 214 || pl.pos.z < -74 || pl.pos.z > 274)
-            pl.pos = SPAWN_POS;                       // mangled save: back to the meadow
+            pl.pos = gSpawn;                          // mangled save: back to the meadow
         pl.apexY = pl.pos.y;
     }
     UnloadFileText(txt);
@@ -272,9 +509,54 @@ static void DrawChargeGauge(void){
 }
 static void DrawHUD(float t){
     int W = GetScreenWidth(), H = GetScreenHeight();
+    if (gFlyMode){
+        // loud, unmistakable: this is a TEST tool, not part of the game
+        float p = 0.6f + 0.4f*sinf(t*4.0f);
+        DrawRectangle(0, 0, W, 40, (Color){140,20,20,180});
+        drawTextC("FLY / TEST MODE  ·  NOT PART OF THE GAME  ·  F3 to exit",
+                  W/2, 10, 22, (Color){255,240,120,(unsigned char)(200+55*p)});
+        drawTextSh("WASD fly  ·  SPACE up  ·  CTRL/E down  ·  SHIFT boost", 16, 52, 18, (Color){235,235,245,220});
+        drawTextSh(TextFormat("pos  x %.1f   y %.1f   z %.1f", pl.pos.x, pl.pos.y, pl.pos.z),
+                   16, 78, 20, (Color){140,235,140,255});
+        drawTextSh(TextFormat("yaw %.0f   pitch %.0f (deg)", pl.yaw*RAD2DEG, pl.pitch*RAD2DEG),
+                   16, 102, 17, (Color){200,220,200,200});
+        DrawCircle(W/2, H/2, 3.0f, (Color){255,240,120,220});   // aim dot
+        return;
+    }
+    // THE FALL: meters drain before your eyes, the edges go red
+    float drop = pl.apexY - pl.pos.y;
+    if (!pl.grounded && !pl.webSwinging && drop > 5.0f){
+        float k = clampf((drop-5.0f)/45.0f, 0.0f, 1.0f);
+        unsigned char va = (unsigned char)(115*k);
+        int ew = (int)(W*0.16f), eh = (int)(H*0.24f);
+        DrawRectangleGradientH(0, 0, ew, H, (Color){120,8,8,va}, (Color){120,8,8,0});
+        DrawRectangleGradientH(W-ew, 0, ew, H, (Color){120,8,8,0}, (Color){120,8,8,va});
+        DrawRectangleGradientV(0, H-eh, W, eh, (Color){120,8,8,0}, (Color){120,8,8,va});
+        int sz = 26 + (int)(26*k);
+        drawTextC(TextFormat("- %d m", (int)drop), W/2, (int)(H*0.60f), sz,
+                  (Color){255, (unsigned char)(130-70*k), (unsigned char)(90-60*k),
+                          (unsigned char)(140 + 115*k)});
+    }
     // crosshair
     DrawCircle(W/2, H/2, 3.2f, (Color){20,20,28,120});
     DrawCircle(W/2, H/2, 2.0f, (Color){255,255,255,220});
+    float webHint = WebSwingRangeFactor();
+    if (webHint > 0.0f){
+        float pulse = 0.65f + 0.35f*sinf((float)GetTime()*8.0f);
+        float rad = 18.0f + 8.0f*webHint + 4.0f*pulse;
+        for (int i=0;i<2;i++)
+            DrawCircleLines(W/2, H/2, rad + i*3.0f, (Color){130,220,255,(unsigned char)(80 + 70*webHint)});
+        DrawCircle(W/2, H/2, 8.0f + 3.0f*webHint, (Color){120,220,255,(unsigned char)(60 + 80*webHint)});
+        drawTextC("WEB", W/2, H/2 + 44, 18, (Color){130,220,255,(unsigned char)(180 + 55*webHint)});
+    }
+    // spore boost: golden ring counting down around the crosshair
+    if (gBoostT > 0){
+        float frac = gBoostT/BOOST_DUR;
+        bool urgent = gBoostT < 1.6f && sinf((float)GetTime()*22) > 0;
+        Color rc = urgent? (Color){255,90,60,235} : (Color){255,208,52,220};
+        DrawRing((Vector2){(float)W/2,(float)H/2}, 26, 31, -90, -90 + 360*frac, 40, rc);
+        drawTextC(TextFormat("%.1f", gBoostT), W/2, H/2 + 40, 17, rc);
+    }
     DrawChargeGauge();
     if (gPerfT > 0){
         gPerfT -= GetFrameTime();
@@ -283,6 +565,36 @@ static void DrawHUD(float t){
         float a = clampf(gPerfT/0.8f, 0, 1);
         int sz = 30 + (int)(8*(1.0f-a));
         drawTextC("PERFECT!", W/2, H/2 - 90, sz, (Color){255,215,60,(unsigned char)(255*a)});
+    }
+    if (gSlamMsgT > 0){
+        gSlamMsgT -= GetFrameTime();
+        float a = clampf(gSlamMsgT/0.8f, 0, 1);
+        int sz = 26 + (int)(8*(1.0f-a));
+        drawTextC("PERFECT SLAM!", W/2, H/2 + 76, sz, (Color){255,150,60,(unsigned char)(255*a)});
+    }
+    if (gUnlockCine > 0){                              // the unlock cinematic overlay
+        float el = CINE_DUR - gUnlockCine;
+        Color tc = gUnlockCineType? (Color){255,150,90,255} : (Color){150,225,255,255};
+        // cinematic letterbox bars
+        float barK = clampf(fminf(el/0.4f, gUnlockCine/0.5f), 0, 1);
+        int bh = (int)(H*0.11f*barK);
+        DrawRectangle(0,0,W,bh,(Color){0,0,0,225});
+        DrawRectangle(0,H-bh,W,bh,(Color){0,0,0,225});
+        // the power enters: a bright color flash
+        if (el > 1.95f && el < 2.35f){
+            float fa = 1.0f - fabsf(el-2.12f)/0.18f;
+            DrawRectangle(0,0,W,H,(Color){tc.r,tc.g,tc.b,(unsigned char)(215*clampf(fa,0,1))});
+        }
+        // the name slams in after the flash
+        if (el > 2.05f){
+            float in = clampf((el-2.05f)/0.28f, 0, 1);
+            float out = clampf(gUnlockCine/0.7f, 0, 1);
+            unsigned char a = (unsigned char)(255*fminf(in,out));
+            int sz = 34 + (int)(18*in);
+            drawTextC("- UNLOCKED -", W/2, (int)(H*0.28f), 22, (Color){tc.r,tc.g,tc.b,a});
+            drawTextC(gUnlockName, W/2, (int)(H*0.28f)+30, sz, (Color){255,232,120,a});
+            drawTextC(gUnlockSub,  W/2, (int)(H*0.28f)+30+sz+14, 20, (Color){255,246,210,a});
+        }
     }
     // altitude
     drawTextSh(TextFormat("ALT  %3.0f m", pl.pos.y), W-198, 16, 30, WHITE);
@@ -308,13 +620,33 @@ static void DrawHUD(float t){
         drawTextC(m.s.c_str(), W/2, my, 25, (Color){255,255,255,(unsigned char)(235*clampf(a,0,1))});
         my += 34;
     }
-    // early controls hint
-    if (t < 22 && !gWon)
-        drawTextC("WASD run  ·  hold LMB / SPACE to swing pole, release to vault  ·  ESC pause",
-                  W/2, H-30, 18, (Color){255,255,255,150});
+    // early controls hint - only the powers you actually own
+    if (t < 22 && !gWon){
+        char hint[220] = "WASD run  ·  LMB charge + release: VAULT";
+        if (gUnlockWeb)  strcat(hint, "  ·  RMB near blooms: swing");
+        if (gUnlockSlam) strcat(hint, "  ·  SHIFT mid-air: SLAM");
+        strcat(hint, "  ·  ESC pause");
+        drawTextC(hint, W/2, H-30, 18, (Color){255,255,255,150});
+    }
     if (gResetT > 0.04f){
         DrawRing((Vector2){(float)W/2,(float)H/2}, 24, 32, 0, 360*clampf(gResetT,0,1), 40, (Color){253,192,40,220});
         drawTextC("hold to reset…", W/2, H/2+44, 18, (Color){253,210,90,220});
+    }
+    if (gOnWarp && !gWon){
+        float p = 0.7f + 0.3f*sinf((float)GetTime()*6.0f);
+        static const char* worlds[4] = {"Castle", "Megashroom", "Sporeway", "Gorge"};
+        int panelW = 460, panelH = 208, px = W/2 - panelW/2, py = H/2 + 44;
+        DrawRectangleRounded((Rectangle){(float)px,(float)py,(float)panelW,(float)panelH}, 0.10f, 8, (Color){18,26,20,225});
+        DrawRectangleRoundedLinesEx((Rectangle){(float)px,(float)py,(float)panelW,(float)panelH}, 0.10f, 8, 3,
+                                    (Color){140,235,140,(unsigned char)(255*p)});
+        drawTextC("WARP  ·  travel to any world", W/2, py+16, 22, (Color){140,235,140,255});
+        for (int i=0;i<4;i++){
+            bool here = (i == gLevel);
+            Color c = here? (Color){120,180,120,200} : (Color){245,250,240,255};
+            drawTextC(TextFormat("[%d]   %s%s", i+1, worlds[i], here? "   (you are here)" : ""),
+                      W/2, py+52+i*28, 20, c);
+        }
+        drawTextC("press a number  ·  or walk off to stay", W/2, py+178, 17, (Color){200,220,200,220});
     }
     if (gMuted) drawTextSh("[M] sound off", 16, H-32, 17, (Color){255,255,255,130});
     drawTextSh(TextFormat("%d fps", GetFPS()), W-86, H-32, 17, (Color){255,255,255,140});
@@ -327,21 +659,25 @@ static void DrawPanelBG(int w, int h){
 }
 static void DrawPause(void){
     int W = GetScreenWidth(), H = GetScreenHeight();
-    DrawPanelBG(640, 430);
-    int y = (H-430)/2 + 28;
+    DrawPanelBG(680, 578);
+    int y = (H-578)/2 + 28;
     drawTextC("SHROOMVAULT", W/2, y, 40, C_GOLD); y += 46;
     drawTextC("a foddian pole-vaulting ascent", W/2, y, 18, (Color){220,220,235,200}); y += 40;
-    const char* lines[] = {
-        "WASD run   ·   mouse look",
-        "hold LMB or SPACE — pole swings down as it charges",
-        "release to PLANT & LAUNCH — sprint first: speed becomes height",
-        "release in the bright GREEN = PERFECT (+15%) — hold past it: FOUL",
-        "red mushrooms are trampolines — the star itself sits on one",
-        "?-blocks pop a coin on first touch. many roads up, no checkpoints",
-        "",
-        "R (hold 1s) restart run   ·   M mute   ·   F11 fullscreen",
-        "ESC resume   ·   Q save & quit" };
-    for (auto s : lines){ drawTextC(s, W/2, y, 19, RAYWHITE); y += 28; }
+    const char* lines[16]; int nl = 0;
+    lines[nl++] = "WASD run   ·   mouse look";
+    lines[nl++] = "hold LMB or SPACE - pole swings down as it charges";
+    lines[nl++] = "release to PLANT & LAUNCH - sprint first: speed becomes height";
+    lines[nl++] = "release in the bright GREEN = PERFECT (+15%) - hold past it: FOUL";
+    lines[nl++] = "red mushrooms are trampolines. aim for them when you fall";
+    if (gUnlockWeb)  lines[nl++] = "hold RMB near a glowing web bloom: swing. let go to fly with it";
+    if (gUnlockSlam) lines[nl++] = "SHIFT mid-air: SLAM. slam a red at the last blink: PERFECT boing";
+    lines[nl++] = "?-blocks pop a coin on first touch. many roads up, no checkpoints";
+    lines[nl++] = "step on a warp pipe to travel to ANY world (new powers at shrines)";
+    lines[nl++] = "";
+    lines[nl++] = "R (hold 1s) restart run   ·   M mute   ·   F11 fullscreen";
+    lines[nl++] = "F3  free-fly TEST camera (inspect levels · not part of the game)";
+    lines[nl++] = "ESC resume   ·   Q save & quit";
+    for (int i=0;i<nl;i++){ drawTextC(lines[i], W/2, y, 19, RAYWHITE); y += 28; }
     y += 8;
     if (gBestTime > 0)
         drawTextC(TextFormat("best climb %02d:%05.2f  ·  wins %d  ·  lifetime falls %d",
@@ -350,18 +686,24 @@ static void DrawPause(void){
         drawTextC(TextFormat("best altitude %d m  ·  lifetime falls %d  ·  the star waits",
                   (int)gBestEver, gTotFalls), W/2, y, 17, (Color){253,210,90,220});
 }
+static bool gWonMenu = false;      // the choice panel after touching the star
 static void DrawWinPanel(void){
     int W = GetScreenWidth(), H = GetScreenHeight();
-    DrawPanelBG(600, 330);
-    int y = (H-330)/2 + 30;
-    drawTextC("* YOU VAULTED THE CASTLE *", W/2, y, 34, C_GOLD); y += 56;
-    drawTextC(TextFormat("time  %02d:%05.2f", (int)(gTime/60), fmodf(gTime,60)), W/2, y, 30, RAYWHITE); y += 42;
+    static const char* titles[4] = {
+        "* YOU VAULTED THE CASTLE *", "* THE MEGASHROOM IS CLIMBED *",
+        "* THE SPOREWAY IS CROSSED *", "* THE GORGE IS CONQUERED *" };
+    DrawPanelBG(640, 388);
+    int y = (H-388)/2 + 30;
+    drawTextC(titles[gLevel], W/2, y, 32, C_GOLD); y += 52;
+    drawTextC(TextFormat("time  %02d:%05.2f", (int)(gTime/60), fmodf(gTime,60)), W/2, y, 30, RAYWHITE); y += 40;
     if (gBestTime > 0)
-        drawTextC(TextFormat("best  %02d:%05.2f", (int)(gBestTime/60), fmodf(gBestTime,60)), W/2, y, 20, (Color){230,230,240,200});
-    y += 36;
+        drawTextC(TextFormat("best  %02d:%05.2f", (int)(gBestTime/60), fmodf(gBestTime,60)), W/2, y, 19, (Color){230,230,240,200});
+    y += 32;
     drawTextC(TextFormat("%d vaults  ·  %d fouls  ·  %d falls  ·  %d/%d coins",
-              pl.vaults, pl.fouls, pl.falls, gCoinCount, (int)gCoins.size()+gQTotal), W/2, y, 20, RAYWHITE); y += 44;
-    drawTextC("hold R to run it back  ·  or stay and enjoy the view", W/2, y, 19, (Color){253,210,90,230});
+              pl.vaults, pl.fouls, pl.falls, gCoinCount, (int)gCoins.size()+gQTotal), W/2, y, 20, RAYWHITE); y += 46;
+    drawTextC("[1]  run this world back", W/2, y, 22, (Color){255,246,210,255}); y += 32;
+    drawTextC("[2]  onward - the next world", W/2, y, 22, (Color){255,246,210,255}); y += 32;
+    drawTextC("[3]  close this - stay and enjoy the view", W/2, y, 22, (Color){255,246,210,255});
 }
 
 // ------------------------------------------------------------ frame render -
@@ -377,30 +719,57 @@ static void RenderAll(Camera3D cam, float t, bool hud){
     GfxFrame(cam.position);
     BeginMode3D(cam);
         DrawSkyBits(t);
+        DrawWebAnchors(cam.position);
         DrawWorld3D(cam.position);
         DrawCoins(t);
+        DrawSpores(t);
+        DrawShrines(t);
+        DrawUnlockOrb(cam);
+        DrawMotes(t);
         DrawStar(t, gWon);
         DrawGoalBeam(t);
         DrawParts3D();
         DrawStreaks();
-        DrawBlobShadow(pl.pos);
+        if (!gFlyMode) DrawBlobShadow(pl.pos);
         rlDrawRenderBatchActive();
         glClear(GLX_DEPTH_BUFFER_BIT);          // pole never clips into walls
-        DrawPoleFP(cam, t);
+        if (!gFlyMode) DrawPoleFP(cam, t);      // no body/pole in the debug fly-cam
     EndMode3D();
     if (hud) DrawHUD(t);
 }
 
 // ------------------------------------------------------- screenshot harness
 static void ShotMode(void){
-    struct { Vector3 pos; float yawD, pitchD, charge; const char* file; } P[5] = {
+    struct Preset { Vector3 pos; float yawD, pitchD, charge; const char* file; };
+    static const Preset castle[5] = {
         {{0,0.91f,-8},      0,   6, 0,     "shot1.png"},
-        {{-18,15.91f,56},  22,   4, 0,     "shot2.png"},
+        {{-10,16.41f,62},  22,   4, 0,     "shot2.png"},
         {{5,0.91f,17},      0,   2, 0.85f, "shot3.png"},
         {{10,70.0f,134},  192, -20, 0,     "shot4.png"},
         {{-7,88.4f,147.5f},145, 14, 0,     "shot5.png"},
     };
-    for (int i=0;i<5;i++){
+    static const Preset tower[4] = {
+        {{0,0.91f,16},      0,  26, 0,     "shotT1.png"},
+        {{18,30.0f,0},    -24,  30, 0,     "shotT2.png"},
+        {{-1.6f,75.0f,62.0f}, 180,  8, 0,  "shotT3.png"},
+        {{0,148.91f,34},    0,  10, 0,     "shotT4.png"},
+    };
+    static const Preset sky[4] = {
+        {{-90,3.91f,40},   90,   8, 0,     "shotS1.png"},   // down the island chain
+        {{-55,10.91f,40},  90,  12, 0,     "shotS2.png"},   // from I1: blooms ahead
+        {{4,22.91f,42},    50,  20, 0,     "shotS3.png"},   // I3: the spore + boost islands
+        {{-25,71.91f,39},  95,   6, 0,     "shotS4.png"},   // I8: final swing to the star
+    };
+    static const Preset gorge[5] = {
+        {{0,0.91f,-30},     0,  10, 0,     "shotG1.png"},   // canyon mouth + gate
+        {{-13.5f,10.91f,20}, 18, -2, 0,    "shotG2.png"},   // from L1: the Steps ahead
+        {{0,44.5f,96},      0,  10, 0,     "shotG3.png"},   // the crossing: blooms over the river
+        {{0,24.0f,200},     0,  55, 0,     "shotG4.png"},   // inside the Throat, looking up
+        {{2,79.0f,224},     0,   4, 0,     "shotG5.png"},   // crown: the star pinnacle
+    };
+    const Preset* P = (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
+    int n = (gLevel==3)? 5 : gLevel? 4 : 5;
+    for (int i=0;i<n;i++){
         pl.pos = P[i].pos; pl.yaw = P[i].yawD*DEG2RAD; pl.pitch = P[i].pitchD*DEG2RAD;
         pl.charging = P[i].charge > 0;
         pl.chargeT = P[i].charge*CHARGE_FULL;
@@ -422,25 +791,49 @@ static void DemoMode(void){
     gSkipLook = 12;                       // physics ticks 2x per polled frame
     const float dt = 1.0f/120.0f;
     float T = 0, maxY = 0;
-    int rf = 0; bool tookShot = false;
-    while (T < 6.0f && !WindowShouldClose()){
-        gBotFwd  = (T > 0.4f && T < 2.2f) || (T > 3.4f && T < 4.0f);
-        gBotHold = (T > 1.05f && T < 2.2f) || (T > 3.5f);   // vault #1, then over-hold -> FOUL
+    int rf = 0; bool shotA = false, shotB = false, webPhase = false;
+    bool boostPhase = false, slamPhase = false, edgePhase = false;
+    while (T < 15.6f && !WindowShouldClose()){
+        gBotFwd  = (T > 0.4f && T < 2.2f) || (T > 3.4f && T < 4.0f) || (T > 8.1f && T < 9.05f);
+        gBotHold = (T > 1.05f && T < 2.2f) || (T > 3.5f && T < 5.0f)   // vault #1, then over-hold -> FOUL
+                || (T > 8.2f && T < 9.15f);                            // boosted PERFECT vault
+        if (!webPhase && T > 5.2f){        // phase 3: fling at a test bloom, mid-air grab
+            webPhase = true;
+            gWebAnchors.push_back({{0, 9.5f, 15.2f}, 3.0f, 0});   // harness-only anchor
+            pl.pos = {0, 8.0f, 10.5f}; pl.vel = {0, 0, 8.0f}; pl.yaw = 0;
+        }
+        gBotWeb = (T > 5.25f && T < 6.6f); // hold the web, then let go and fly
+        if (!boostPhase && T > 8.0f){      // phase 4: spore-boosted launch
+            boostPhase = true;
+            pl.pos = {0, 0.91f, -8}; pl.vel = {0,0,0}; pl.yaw = 0;
+            gBoostT = 9.0f;
+        }
+        if (!slamPhase && T > 10.7f){      // phase 5: perfect slam onto the west red bail
+            slamPhase = true;
+            gBoostT = 0;
+            pl.pos = {-26, 27.0f, 50}; pl.vel = {0,0,0}; pl.yaw = 0;
+        }
+        gBotSlam = (T > 11.35f && T < 11.43f);   // pressed ~0.27 s before impact = PERFECT
+        if (!edgePhase && T > 13.4f){    // phase 6: EDGE-GLITCH test - off-center fast fall onto cap
+            edgePhase = true;
+            pl.pos = {-23.6f, 42.0f, 50}; pl.vel = {0,0,0}; pl.yaw = 0;   // 2.4 off the -26 center
+        }
         PlayerUpdate(dt, false);
         maxY = fmaxf(maxY, pl.pos.y);
         T += dt;
         if (lf && ((int)(T*10) != (int)((T-dt)*10)))
-            fprintf(lf, "t=%.1f pos=(%6.2f,%6.2f,%6.2f) vel=(%5.1f,%5.1f,%5.1f) gnd=%d chg=%d vaults=%d fouls=%d\n",
+            fprintf(lf, "t=%.1f pos=(%6.2f,%6.2f,%6.2f) vel=(%5.1f,%5.1f,%5.1f) gnd=%d chg=%d web=%d vaults=%d fouls=%d\n",
                     T, pl.pos.x, pl.pos.y, pl.pos.z, pl.vel.x, pl.vel.y, pl.vel.z,
-                    pl.grounded?1:0, pl.charging?1:0, pl.vaults, pl.fouls);
+                    pl.grounded?1:0, pl.charging?1:0, pl.webSwinging?1:0, pl.vaults, pl.fouls);
         if ((rf++ & 1) == 0){
             BeginDrawing();
             RenderAll(GetCam(), T, true);
             EndDrawing();
         }
-        if (!tookShot && T > 2.6f){ TakeScreenshot("demo_flight.png"); tookShot = true; }
+        if (!shotA && T > 2.62f){ TakeScreenshot("demo_flight.png"); shotA = true; }   // vault kick
+        if (!shotB && T > 5.9f){ TakeScreenshot("demo_swing.png"); shotB = true; }     // web swing
     }
-    gBotFwd = gBotHold = false;
+    gBotFwd = gBotHold = gBotWeb = gBotSlam = false; gBoostT = 0;
     if (lf){
         fprintf(lf, "SUMMARY maxY=%.2f vaults=%d fouls=%d falls=%d final=(%.1f,%.1f,%.1f)\n",
                 maxY, pl.vaults, pl.fouls, pl.falls, pl.pos.x, pl.pos.y, pl.pos.z);
@@ -452,40 +845,106 @@ static void DemoMode(void){
 static void DoReset(void){
     bool hadWon = gWon;
     pl = Player();
-    gWon = false; gTime = 0; gTimerStarted = false;
+    pl.pos = gSpawn; pl.apexY = gSpawn.y;
+    gWon = false; gWonMenu = false; gTime = 0; gTimerStarted = false;
     for (auto& c : gCoins) c.taken = false;        // coins respawn with the run
     for (auto& s : solids) s.used = false;         // ?-blocks refill
     gCoinCount = 0; gCoinCombo = 0; gCoinPops.clear();
+    gBoostT = 0; for (auto& sp : gSpores) sp.cd = 0;
+    for (auto& wa : gWebAnchors) wa.wilt = 0;      // blooms regrow - never soft-lock a web gap
     gMsgs.clear();
     MSG(hadWon? "Round two. The castle is not impressed." : "Back to the meadow. Breathe.", 3.5f);
     SaveGame();
 }
 
 // -------------------------------------------------------------------- main -
-static struct { float alt; const char* txt; bool done; } gTrigs[] = {
-    {15.8f, "The Ramparts! Three ways up here — three ways onward.", false},
+struct Trig { float alt; const char* txt; bool done; };
+static Trig gTrigsCastle[] = {
+    {15.8f, "The Ramparts! Three ways up here - three ways onward.", false},
     {24.5f, "Blocks, beams or the big shrooms. Pick a lane.", false},
     {36.0f, "The Keep face. Hug the wall, it forgives overshoots.", false},
     {45.8f, "Keep roof! Pegs on the right, broken stair on the left.", false},
     {62.0f, "Cloudwalk. Sprint, PERFECT, pray.", false},
-    {83.6f, "THE SPIRE. The star sits over a giant red cap — bounce through it!", false},
+    {83.6f, "THE SPIRE. The star sits over a giant red cap - bounce through it!", false},
 };
+static Trig gTrigsTower[] = {
+    { 6.0f, "THE MEGASHROOM. Shelf-caps spiral the stalk. Reds are your parachutes.", false},
+    {17.0f, "Follow the spiral - each cap turns the same way. Never fight the stalk.", false},
+    {40.0f, "Short hop, half charge, full send - READ each gap. One hold fits none.", false},
+    {72.0f, "Canopy heights. Fall lanes run all the way down - steer onto a red.", false},
+    {110.0f,"The crown run. Reds are scarce and one gate demands a PERFECT.", false},
+    {140.0f,"The crown. Don't look down. (Look down.)", false},
+};
+static Trig gTrigsSky[] = {
+    { 4.5f, "THE SPOREWAY. Sprint-vault the chain of floating islands.", false},
+    { 8.5f, "Reds wait in the gaps - a short jump lands and bounces you onward.", false},
+    {18.0f, "NOW the blooms: vault off, grab RMB mid-air, release on the upswing.", false},
+    {24.0f, "GOLDEN SPORES turbo-charge the pole. They fade fast - chain the jumps!", false},
+    {48.0f, "Spore, vault, land, TURN, vault. No dawdling.", false},
+    {68.0f, "One long swing to the star. Time the release. Fly.", false},
+};
+static Trig gTrigsGorge[] = {
+    { 3.5f, "THE GORGE. Press SHIFT mid-air to SLAM. Slam a red cap: mega-boing.", false},
+    { 8.5f, "Slam LATE - a blink before impact - for a PERFECT. Chain them to climb.", false},
+    {19.0f, "Exit ledges wait partway up each shaft. The stone arches bite overshoots.", false},
+    {38.0f, "The crossing. Two blooms, no nets. The river is very far down.", false},
+    {50.0f, "The Throat: one PERFECT slam off the plank reaches the true exit.", false},
+    {64.0f, "Spore the pinnacles. Then one last perfect slam... into the star.", false},
+};
+static Trig* gTrigs = gTrigsCastle;
+static int   gTrigN = 6;
+
+static void ApplyLevelMeta(void){
+    gQTotal = 0; for (auto& s : solids) if (s.surf == S_QBLOCK) gQTotal++;
+    if      (gLevel == 1){ gTrigs = gTrigsTower;  gTrigN = (int)(sizeof(gTrigsTower)/sizeof(Trig)); }
+    else if (gLevel == 2){ gTrigs = gTrigsSky;    gTrigN = (int)(sizeof(gTrigsSky)/sizeof(Trig)); }
+    else if (gLevel == 3){ gTrigs = gTrigsGorge;  gTrigN = (int)(sizeof(gTrigsGorge)/sizeof(Trig)); }
+    else                 { gTrigs = gTrigsCastle; gTrigN = (int)(sizeof(gTrigsCastle)/sizeof(Trig)); }
+    for (int i=0;i<gTrigN;i++) gTrigs[i].done = false;
+}
+static void GoToLevel(int lv){
+    BuildWorld(((lv % 4) + 4) % 4);
+    pl = Player();
+    pl.pos = gSpawn; pl.apexY = gSpawn.y;
+    gWon = false; gWonMenu = false; gTime = 0; gTimerStarted = false;
+    gCoinCount = 0; gCoinCombo = 0; gCoinPops.clear();
+    gBoostT = 0; gUnlockCine = 0;
+    SetLevelUnlocks(-1.0f);            // fresh entry: the shrine here re-arms its cinematic
+    ApplyLevelMeta();
+    gMsgs.clear();
+    SND(sPop, 0.6f, 0.9f); SND(sWhoosh, 0.7f, 0.8f);
+    static const char* names[4] = {
+        "Back to the castle meadow.",
+        "* THE MEGASHROOM *  climb high, bounce well.",
+        "* THE SPOREWAY *  swing far, chain the spores.",
+        "* THE GORGE *  slam late. Climb the thunder." };
+    MSG(names[gLevel], 4.5f);
+    SaveGame();
+}
+static void SwitchLevel(void){ GoToLevel((gLevel + 1) % 4); }
 
 int main(int argc, char** argv){
-    bool shot = (argc > 1) && (strcmp(argv[1], "--shot") == 0);
+    bool shot  = (argc > 1) && (strcmp(argv[1], "--shot") == 0);
+    bool shotb = (argc > 1) && (strcmp(argv[1], "--shotb") == 0);
+    bool shotc = (argc > 1) && (strcmp(argv[1], "--shotc") == 0);
+    bool shotd = (argc > 1) && (strcmp(argv[1], "--shotd") == 0);
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(1600, 900, "ShroomVault — a foddian pole vault");
+    InitWindow(1600, 900, "ShroomVault - a foddian pole vault");
     SetExitKey(KEY_NULL);
-    SetTargetFPS(240);
+    // hard frame cap at the monitor's rate (vsync is only a HINT and often
+    // fails) - uncapped GPU churn for minutes is how PCs overheat and die
+    int rr = GetMonitorRefreshRate(GetCurrentMonitor());
+    SetTargetFPS((int)clampf((float)rr, 60, 144));
     snprintf(gSavePath, sizeof(gSavePath), "%sshroomvault_save.txt", GetApplicationDirectory());
-    LoadGfx(); InitSky(); BuildWorld();
+    LoadGfx(); InitSky(); BuildWorld(shotd? 3 : shotc? 2 : shotb? 1 : 0);
     for (auto& s : solids) if (s.surf == S_QBLOCK) gQTotal++;
 
-    if (shot){ ShotMode(); CloseWindow(); return 0; }
+    if (shot || shotb || shotc || shotd){ ShotMode(); CloseWindow(); return 0; }
     if (argc > 1 && strcmp(argv[1], "--demo") == 0){ DemoMode(); CloseWindow(); return 0; }
 
-    LoadAudioAll(); InitWind(); LoadSave();
+    LoadAudioAll(); InitWind(); StartMusic(); LoadSave();
+    if (gLevel != 0) ApplyLevelMeta();      // save resumed us elsewhere
     DisableCursor();
 
     bool introA=false, introB=false, introC=false;
@@ -495,6 +954,13 @@ int main(int argc, char** argv){
         float dt = rawDt;
         if (gHitstop > 0){ gHitstop -= rawDt; dt *= 0.12f; }   // impact frames
         gShake *= expf(-8.0f*rawDt);
+        if (gUnlockT > 0) gUnlockT -= rawDt;
+        if (gUnlockCine > 0){                                  // unlock cinematic: slow-mo
+            gUnlockCine -= rawDt;
+            dt *= 0.4f;
+            if (gUnlockCine <= 0){ gUnlockCine = 0; gSkipLook = 2;
+                SND(gUnlockCineType? sBoing : sDing, 1.2f, 0.7f); }
+        }
 
         if (IsKeyPressed(KEY_ESCAPE)){
             gPaused = !gPaused;
@@ -504,8 +970,30 @@ int main(int argc, char** argv){
         if (IsKeyPressed(KEY_M)) gMuted = !gMuted;
         if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
         if (gPaused && IsKeyPressed(KEY_Q)) gQuit = true;
+        if (IsKeyPressed(KEY_F3)){                       // DEBUG free-fly toggle
+            gFlyMode = !gFlyMode; gSkipLook = 2;
+            MSG(gFlyMode? "FLY TEST MODE - not part of the game (F3 to exit)"
+                        : "fly mode off - back to the game", 2.5f);
+        }
 
-        if (!gPaused){
+        if (!gPaused && gFlyMode){                        // inspect the level, no gameplay
+            FlyUpdate(dt);
+        } else if (!gPaused && gUnlockCine > 0){          // frozen in the unlock cinematic
+            float el = CINE_DUR - gUnlockCine;
+            pl.vel = {0,0,0}; pl.charging = false; pl.slamming = false; pl.webSwinging = false;
+            if (el > 0.4f && el < 1.9f && GetRandomValue(0,100) < 55){   // sparkles rise from the bloom
+                float a = frnd(0,6.283f), rr = frnd(0.3f,1.3f);
+                spawnPart(gUnlockCinePos + (Vector3){cosf(a)*rr, frnd(-0.3f,0.7f), sinf(a)*rr},
+                          {cosf(a)*1.4f, frnd(2.0f,5.0f), sinf(a)*1.4f}, 0.7f, 0.12f, -1.5f,
+                          gUnlockCineType? (Color){255,150,90,255} : (Color){150,225,255,255});
+            }
+            if (el > 2.05f && el < 2.20f){                              // the power bursts into you
+                gShake = fmaxf(gShake, 0.5f);
+                for (int i=0;i<3;i++){ float a=frnd(0,6.283f);
+                    spawnPart(pl.pos + (Vector3){0,0.5f,0}, {cosf(a)*6.0f,frnd(1,5),sinf(a)*6.0f},
+                              0.6f, 0.14f, -3.0f, (i%2)? C_GOLD : WHITE); }
+            }
+        } else if (!gPaused){
             if (IsKeyDown(KEY_R)){
                 gResetT += dt;
                 if (gResetT >= 1.0f){ DoReset(); gResetT = -0.6f; }
@@ -513,38 +1001,82 @@ int main(int argc, char** argv){
 
             PlayerUpdate(dt, false);
             UpdateCoins(dt);
+            UpdateSpores(dt);
+            UpdateShrines();
             UpdateStreaks(dt);
+            for (auto& wa : gWebAnchors) wa.wilt = fmaxf(0.0f, wa.wilt - dt);
+            // the soundtrack thins out while you plummet - dread, audible
+            float fallDrop = pl.apexY - pl.pos.y;
+            float duckTgt = (!pl.grounded && !pl.webSwinging && fallDrop > 6.0f)? 0.22f : 1.0f;
+            gMusicDuck += (duckTgt - gMusicDuck)*fminf(1.0f, rawDt*2.5f);
             if (gTimerStarted && !gWon) gTime += dt;
             gBestEver = fmaxf(gBestEver, pl.pos.y);
 
-            if (!introA && t > 0.6f){ introA=true; MSG("SHROOMVAULT — climb to the * on the spire.", 5.0f); }
+            if (!introA && t > 0.6f){ introA=true; MSG("SHROOMVAULT - climb to the * on the spire.", 5.0f); }
             if (!introB && t > 4.8f){ introB=true; MSG("Hold LMB: pole swings. Release in the GREEN = PERFECT vault.", 5.5f); }
-            if (!introC && t > 10.2f){ introC=true; MSG("Sprint before you plant — speed becomes height. Flags mark the routes.", 5.0f); }
-            for (auto& tr : gTrigs)
-                if (!tr.done && pl.pos.y > tr.alt){ tr.done = true; MSG(tr.txt, 4.0f); }
+            if (!introC && t > 10.2f){ introC=true; MSG("Sprint before you plant - speed becomes height. Flags mark the routes.", 5.0f); }
+            static bool webTip = false;
+            if (!webTip && WebSwingRangeFactor() > 0.25f){
+                webTip = true; MSG("A web bloom! Hold RMB to swing from it - let go to keep the speed.", 5.5f);
+            }
+            for (int i=0;i<gTrigN;i++)
+                if (!gTrigs[i].done && pl.pos.y > gTrigs[i].alt){ gTrigs[i].done = true; MSG(gTrigs[i].txt, 4.0f); }
 
-            Vector3 sb = STAR_POS; sb.y += sinf(t*1.6f)*0.35f;
+            // standing on a warp pipe mouth opens the world-select menu
+            {
+                float wx = pl.pos.x - gWarpTop.x, wz = pl.pos.z - gWarpTop.z;
+                gOnWarp = pl.grounded && wx*wx + wz*wz < 2.0f*2.0f
+                       && fabsf((pl.pos.y - PLAYER_HH) - gWarpTop.y) < 0.5f;
+                if (gOnWarp){
+                    int pick = -1;
+                    if (IsKeyPressed(KEY_ONE))   pick = 0;
+                    if (IsKeyPressed(KEY_TWO))   pick = 1;
+                    if (IsKeyPressed(KEY_THREE)) pick = 2;
+                    if (IsKeyPressed(KEY_FOUR))  pick = 3;
+                    if (IsKeyPressed(KEY_ENTER)) pick = (gLevel + 1) % 4;
+                    if (pick >= 0 && pick != gLevel) GoToLevel(pick);
+                }
+            }
+
+            Vector3 sb = gStarP; sb.y += sinf(t*1.6f)*0.35f;
             if (!gWon && Vector3Distance(pl.pos, sb) < STAR_WIN_R){
-                gWon = true; gWins++;
+                gWon = true; gWins++; gWonMenu = true;
                 if (gBestTime <= 0 || gTime < gBestTime) gBestTime = gTime;
                 FX_Win(); SaveGame();
+            }
+            if (gWon && gWonMenu){                     // the three roads from the top
+                if (IsKeyPressed(KEY_ONE))   { gWonMenu = false; DoReset(); }
+                if (IsKeyPressed(KEY_TWO))   { gWonMenu = false; SwitchLevel(); }
+                if (IsKeyPressed(KEY_THREE)) { gWonMenu = false; MSG("The view is yours. Warp pipes wait below.", 4.0f); }
             }
             gAutosaveT += dt;
             if (gAutosaveT > 8){ gAutosaveT = 0; SaveGame(); }
         }
         UpdateWind(Vector3Length(pl.vel));
+        UpdateMusic(rawDt, pl.pos.y, gWon);
         UpdateParts(dt);
         UpdateMsgs(dt);
         if (gWon) ConfettiTick();
 
         BeginDrawing();
         RenderAll(GetCam(), t, true);
-        if (gWon && !gPaused) DrawWinPanel();
+        if (gWon && gWonMenu && !gPaused && !gFlyMode) DrawWinPanel();
         if (gPaused) DrawPause();
         EndDrawing();
     }
     SaveGame();
-    if (gAudioOK) CloseAudioDevice();
+    if (gAudioOK){
+        if (gWindOn) UnloadAudioStream(gWind);
+        Sound* snds[13] = {&sBoing,&sPlant,&sWhoosh,&sWhiff,&sFoul,&sTick,&sDing,
+                           &sLand,&sStep,&sPop,&sWin,&sPerfect,&sThud};
+        for (int i=0;i<13;i++) UnloadSound(*snds[i]);
+        for (int i=0;i<3;i++) UnloadSound(gMusic[i]);
+        CloseAudioDevice();
+    }
+    UnloadShader(gToon);
+    for (int i=0;i<TX_COUNT;i++) UnloadTexture(gTex[i]);
+    Model* mdls[5] = {&gCube,&gCyl,&gSphere,&gCone,&gPlane};
+    for (int i=0;i<5;i++) UnloadModel(*mdls[i]);
     CloseWindow();
     return 0;
 }

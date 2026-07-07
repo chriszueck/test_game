@@ -4,7 +4,9 @@
 but a pole vault. No checkpoints. No jump button. The meadow is always waiting.
 
 Written in C++ with [raylib](https://www.raylib.com) — no engine, no assets:
-every texture, model, and sound is generated in code at startup.
+every texture, model, sound, and the three zone music tracks (meadow tune,
+castle march, sky drift — they crossfade as you climb) are generated in code
+at startup.
 
 ## Play
 
@@ -17,6 +19,8 @@ Run **`ShroomVault.exe`**.
 | **release** | plant the pole & launch — longer hold = bigger vault |
 | release in the **bright green** | **PERFECT** (+15% power). Hold past it and you **FOUL** (stumble) |
 | **sprint into the plant** | run speed converts into extra height — sprint-vaults go much bigger |
+| **hold RMB** (or tap F) | near a glowing **web bloom**: swing from it. Let go to fly with your momentum — *unlocked at the Weaver's Bloom shrine (world 2)* |
+| **SHIFT** (or E) mid-air | **SLAM** — tuck and drop. Slam a red cap at the last blink: **PERFECT SLAM**, the bounce returns *more* than you brought — *unlocked at the Thunder Shrine (world 4)* |
 | R (hold 1s) | rage-reset to the meadow |
 | ESC | pause · M mute · F11 fullscreen · Q (paused) save & quit |
 
@@ -33,6 +37,11 @@ And the star itself sits on a giant red cap: **the final move is a bounce.**
 scale. **?-blocks** pop a bonus coin on first touch (bonk them from below,
 Mario-style, or just land on them). Everything respawns when you reset.
 
+**Web blooms** (glowing blue-white buds) dot a few tricky stretches. Swing
+under one to convert a fall into speed, pump with W, and release at the top
+of the arc. They keep your momentum — a swing is only as good as the vault
+that started it.
+
 ### The routes
 There are **many roads up** — flags mark where they start. Every choice can be
 bailed into a red mushroom, and every fall goes exactly as far as you earned.
@@ -46,6 +55,34 @@ bailed into a red mushroom, and every fall goes exactly as far as you earned.
 - gate-tower slabs → **?-block bridge** → keep balconies
 - **giant shroom stack** in the east courtyard → beams bolted to the keep
 - bold **gap-bricks** straight across — long sprint-vaults, big air
+
+### Level 4: THE GORGE
+The longest and hardest climb: a quarried canyon of strata, pines, hanging
+vines, crystals, a river and a waterfall — built entirely around the SLAM.
+Giant red caps rise from the floor as bounce shafts; slam late to grow each
+bounce, then land your apex inside the exit window: the stone arches over
+every shaft bite overshoots. Some windows demand a PERFECT slam, one
+punishes it. Past the two-bloom crossing and the lying ledges of the Throat,
+the final move is a vault over a lone red cap into a perfect slam — the
+boing carries you through the star. No nets. The floor remembers.
+
+### Level 3: THE SPOREWAY
+Floating islands strung across the sky — and the **web blooms are the
+bridges**: vault off an island's edge, grab mid-air, ride the pendulum, and
+release on the upswing. One gap takes two blooms in a single flight. New
+here: **golden spores** turbo-charge your pole for seven seconds — the
+double-height island hops they unlock must be chained before the glow fades
+(the ring around your crosshair is the timer). Spores regrow, falls land in
+the meadow, red caps wait under the flight lines.
+
+### Level 2: THE MEGASHROOM
+Step onto the flagged **warp pipe near the spawn** to visit the second level:
+one colossal mushroom, ~150 m tall. Shelf-caps spiral tightly around the
+stalk, so every fall drops straight back down the route you climbed — the
+red caps you passed are your parachutes. Rises are taller (sprint every
+plant), platforms are smaller, three gaps are blocked by the stalk itself
+and must be **bounce-hopped** off a red cap, and one gate near the crown
+demands a PERFECT. The warp pipes cycle: castle → megashroom → sporeway → castle.
 
 **Keep roof → the ★ (~94 m)** — two ways up the spire:
 - **peg spiral** round the bare mini-tower → **cloudwalk** → balcony ring

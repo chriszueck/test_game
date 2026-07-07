@@ -1,5 +1,5 @@
 // ============================================================================
-// ShroomVault — a foddian first-person pole-vault ascent
+// ShroomVault - a foddian first-person pole-vault ascent
 // game.h : includes, tuning constants, shared types, event hooks
 // ============================================================================
 #pragma once
@@ -23,7 +23,7 @@ static const float GRAV_DOWN   = 46.0f;   // heavier fall = snappier arcs
 static const float TERMINAL    = 55.0f;   // max fall speed
 static const float RUN_SPEED   = 8.0f;    // ground run speed
 static const float GROUND_ACC  = 60.0f;
-static const float AIR_ACC     = 10.0f;   // air steer (nudge landings, not fly)
+static const float AIR_ACC     = 3.5f;    // air steer (nudge landings, not fly)
 static const float PLAYER_R    = 0.35f;   // half-width
 static const float PLAYER_HH   = 0.90f;   // half-height (center to feet)
 static const float EYE_OFF     = 0.70f;   // eye above center
@@ -37,21 +37,33 @@ static const float OVERSHOOT   = 0.30f;   // total grace past full before FOUL
 static const float PERFECT_MULT= 1.15f;
 static const float VAULT_VY0   = 8.0f;    // vertical launch at tap
 static const float VAULT_VY1   = 13.0f;   // + per power
-static const float VAULT_FWD0  = 2.5f;    // forward impulse at tap
-static const float VAULT_FWD1  = 5.5f;    // + per power
-static const float VAULT_KEEP  = 0.6f;    // fraction of run speed carried through
+static const float VAULT_FWD0  = 0.8f;    // forward push at tap - near-vertical hop
+static const float VAULT_FWD1  = 4.5f;    // + per power
+static const float VAULT_KEEP  = 0.65f;   // sprint carried through: run buys distance
 static const float MOMENTUM_K  = 0.25f;   // sprint-into-launch conversion (adds vy)
 static const float LAND_STICK  = 0.15f;   // horizontal velocity kept on hard landing
 static const float BUFFER_T    = 0.12f;   // early-release grace: vault fires on touch
-static const float BOUNCE_K    = 0.90f;   // red mushroom restitution
+static const float BOUNCE_K    = 0.78f;   // red cap restitution, no slam: bounces decay
 static const float BOUNCE_MIN  = 9.0f;
-static const float BOUNCE_MAX  = 40.0f;
+static const float BOUNCE_MAX  = 44.0f;
+// THE SLAM: dive mid-air (SHIFT/E). Slam a red cap and the bounce returns
+// MORE than you brought - if you pressed late enough.
+static const float SLAM_GRAV   = 62.0f;   // dive gravity
+static const float SLAM_TERM   = 60.0f;   // dive terminal velocity
+static const float SLAM_WIN    = 0.30f;   // pressed within this of impact = PERFECT
+static const float SLAM_K_GOOD = 0.88f;   // slammed, but early (extra dive speed compensates)
+static const float SLAM_K_PERF = 1.15f;   // slammed at the last blink
+static const float SLAM_STUN   = 0.35f;   // slamming solid rock hurts
 static const float HITSTOP_VAULT   = 0.05f;  // impact-frame slow-mo on plant
 static const float HITSTOP_PERFECT = 0.11f;
 
 static const Vector3 SPAWN_POS = { 0.0f, 0.91f, -8.0f };
 static const Vector3 STAR_POS  = { 0.0f, 94.2f, 136.0f };  // the goal: bounce-height only
 static const float   STAR_WIN_R = 2.3f;
+
+// per-level spawn/goal (BuildWorld sets these; defaults = castle level)
+static Vector3 gSpawn = SPAWN_POS;
+static Vector3 gStarP = STAR_POS;
 
 // ---------------------------------------------------------------- helpers --
 static inline Vector3 operator+(Vector3 a, Vector3 b){ return {a.x+b.x, a.y+b.y, a.z+b.z}; }
@@ -67,7 +79,7 @@ static inline Color ctint(Color c, float m){
 
 // ------------------------------------------------------------- world types -
 enum Surf { S_GRASS, S_STONE, S_BRICK, S_WOOD, S_QBLOCK, S_PIPE,
-            S_SHROOM_TAN, S_SHROOM_RED, S_CLOUD, S_GOLD, S_DARK };
+            S_SHROOM_TAN, S_SHROOM_RED, S_CLOUD, S_GOLD, S_DARK, S_SAND };
 
 struct Solid {
     bool    isCyl;
@@ -86,23 +98,60 @@ struct Decor {
 };
 
 // autopilot flags for the --demo verification mode (OR'd into real input)
-static bool gBotHold = false, gBotFwd = false;
+static bool gBotHold = false, gBotFwd = false, gBotWeb = false, gBotSlam = false;
+
+// web swing: how far a web bloom can be grabbed from
+static const float WEB_RANGE = 15.0f;
 
 // game feel state shared between player physics and the frame loop
 static float gHitstop = 0;    // remaining impact-frame slow-mo (main loop scales dt)
 static float gShake   = 0;    // camera shake amplitude, decays each frame
+
+struct WebAnchor { Vector3 pos; float radius; float wilt; };
+static std::vector<WebAnchor> gWebAnchors;
+// one swing per bloom: any detach wilts it; the silk snaps if you dawdle
+static const float WEB_MAX_T = 3.0f;       // attached longer than this: SNAP
+static const float WEB_WILT  = 5.0f;       // bloom regrow time after a swing
+
+// golden spore: timed vault turbo - grab it, then chain the big jumps fast
+struct Spore { Vector3 p; float cd; };
+static std::vector<Spore> gSpores;
+static float gBoostT = 0;                  // boost time remaining
+static const float BOOST_DUR   = 7.0f;     // how long a spore lasts
+static const float BOOST_VY    = 5.5f;     // extra launch speed while boosted
+static const float SPORE_CD    = 5.0f;     // regrow time after pickup
+
+// mechanics unlock as the worlds introduce them (persisted in the save)
+static bool gUnlockWeb  = false;           // won at the Weaver's Bloom (Megashroom)
+static bool gUnlockSlam = false;           // won at the Thunder Shrine (Gorge)
+struct Shrine { Vector3 p; int type; };    // type 0 = web, 1 = slam
+static std::vector<Shrine> gShrines;
+
+// ambient life: fireflies / butterflies / petals orbiting anchor points
+struct Mote { Vector3 p; Color c; float r, spd; };
+static std::vector<Mote> gMotes;
+
+// music ducks while you fall - the world holds its breath
+static float gMusicDuck = 1.0f;
+// unlock fanfare timer (drawn by the HUD; the blooms flare while it runs)
+static float gUnlockT = 0;
+// DEBUG free-fly camera (F3). NOT part of the game - a level-inspection tool.
+static bool gFlyMode = false;
 
 // ------------------------------------------------------------ event hooks --
 // implemented in main.cpp; called from player physics / world logic
 void MSG(const char* text, float dur = 4.0f);
 void FX_Land(Vector3 pos, float impact);
 void FX_Bounce(Vector3 pos, float speed);
+void FX_Plant(Vector3 plantPos, float charge, bool perfect);
 void FX_Vault(Vector3 plantPos, float charge, bool perfect);
 void FX_Foul();
 void FX_Whiff();
 void FX_ChargeTick(int quarter);
 void FX_Bump(Vector3 pos, int surf);
 void FX_QCoin(Vector3 blockTop);
+void FX_Slam();
+void FX_SlamHit(Vector3 pos, bool perfect, float outVel);
 void FX_BigFall(float meters);
 void FX_Win();
 void SpawnDust(Vector3 pos, int n, Color col);

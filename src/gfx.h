@@ -92,6 +92,59 @@ static void LoadTextures(void){
         }
         gTex[TX_BRICK] = makeTex(im, true);
     }
+    { // wood planks: 4 vertical boards, grain streaks, nail dots
+        Image im = GenImageColor(128,128,(Color){176,120,58,255});
+        for (int p=0;p<4;p++){
+            int x0 = p*32;
+            ImageDrawRectangle(&im, x0, 0, 2, 128, (Color){118,72,30,255});      // board seam
+            for (int g=0;g<5;g++)                                                // grain
+                ImageDrawRectangle(&im, x0+4+GetRandomValue(0,24), GetRandomValue(0,96),
+                                   1, GetRandomValue(18,42), (Color){150,98,44,255});
+            ImageDrawRectangle(&im, x0+14, 6,   3, 3, (Color){96,58,24,255});     // nails
+            ImageDrawRectangle(&im, x0+14, 119, 3, 3, (Color){96,58,24,255});
+        }
+        gTex[TX_WOOD] = makeTex(im, true);
+    }
+    { // stem fiber: white base, soft vertical streaks (tinted per use)
+        Image im = GenImageColor(64,128,WHITE);
+        for (int i=0;i<26;i++){
+            int x = GetRandomValue(0,63);
+            ImageDrawRectangle(&im, x, GetRandomValue(0,60), GetRandomValue(1,2),
+                               GetRandomValue(30,68), (Color){233,224,206,255});
+        }
+        gTex[TX_FIBER] = makeTex(im, true);
+    }
+    { // cap streaks: white base, faint radial streaking + top sheen (tinted per cap)
+        Image im = GenImageColor(128,128,WHITE);
+        for (int i=0;i<34;i++){
+            int x = GetRandomValue(0,127);
+            ImageDrawRectangle(&im, x, GetRandomValue(20,70), GetRandomValue(1,3),
+                               GetRandomValue(30,58), (Color){229,221,211,255});
+        }
+        ImageDrawRectangle(&im, 0, 0, 128, 14, (Color){255,255,255,255});         // polar sheen
+        ImageDrawRectangle(&im, 0, 14, 128, 8, (Color){246,242,236,255});
+        gTex[TX_STREAK] = makeTex(im, true);
+    }
+    { // pipe gloss: vertical brightness bands (tinted pipe-green)
+        Image im = GenImageColor(64,64,WHITE);
+        for (int x=0;x<64;x++){
+            float k = sinf(x/64.0f*2.0f*PI);
+            unsigned char v = (unsigned char)clampf(226 + 28*k, 200, 255);
+            ImageDrawRectangle(&im, x, 0, 1, 64, (Color){v,v,v,255});
+        }
+        ImageDrawRectangle(&im, 10, 0, 5, 64, WHITE);                             // hot highlight
+        gTex[TX_PIPEG] = makeTex(im, true);
+    }
+    { // sandstone: warm speckle + faint wind-ripple lines
+        Image im = GenImageColor(128,128,(Color){214,190,150,255});
+        for (int i=0;i<420;i++){
+            Color p = (i%3)? (Color){202,176,134,255} : (Color){226,204,166,255};
+            ImageDrawRectangle(&im, GetRandomValue(0,126), GetRandomValue(0,126), 2, 2, p);
+        }
+        for (int r=0;r<6;r++)
+            ImageDrawRectangle(&im, 0, 12+r*20+GetRandomValue(-3,3), 128, 2, (Color){206,180,140,255});
+        gTex[TX_SAND] = makeTex(im, true);
+    }
     { // ? block
         Image im = GenImageColor(128,128,C_GOLD);
         Color edge = {182,120,20,255}, riv = {120,74,12,255};
@@ -149,6 +202,16 @@ static void drawCylBetween(Vector3 a, Vector3 b, float rad, Color col){
     if (Vector3Length(axis) < 0.0001f) axis = (Vector3){1,0,0};
     drawM(gCyl, a, {rad,len,rad}, col, TX_WHITE, axis, ang);
 }
+// a cone from `base` pointing along `dir` (petals, spikes)
+static void drawConeTo(Vector3 base, Vector3 dir, float len, float rad, Color col, int tex=TX_WHITE){
+    float dl = Vector3Length(dir);
+    if (dl < 0.0001f) return;
+    Vector3 d = dir*(1.0f/dl);
+    Vector3 axis = Vector3CrossProduct((Vector3){0,1,0}, d);
+    float ang = RAD2DEG*acosf(clampf(d.y, -1, 1));
+    if (Vector3Length(axis) < 0.0001f) axis = (Vector3){1,0,0};
+    drawM(gCone, base, {rad, len, rad}, col, tex, axis, ang);
+}
 
 // ------------------------------------------------------------ world draw ---
 static void DrawSolid(const Solid& s, int idx){
@@ -165,8 +228,9 @@ static void DrawSolid(const Solid& s, int idx){
             if (s.used){ tex = TX_BRICK; tint = (Color){168,120,74,255}; }
             else tex = TX_Q;
             break;
-        case S_WOOD:   tint = C_WOOD;  break;
-        case S_PIPE:   tint = C_PIPE;  break;
+        case S_WOOD:   tex = TX_WOOD;  break;
+        case S_PIPE:   tex = TX_PIPEG; tint = C_PIPE; break;
+        case S_SAND:   tex = TX_SAND;  break;
         case S_GOLD:   tint = C_GOLD;  break;
         case S_DARK:   tint = {70,60,55,255}; break;
         case S_CLOUD:  tint = C_CLOUD; break;
@@ -185,6 +249,68 @@ static void DrawDecorItem(const Decor& d){
         case D_CUBE:   drawM(gCube,   d.pos, d.scale, d.col, d.tex, {0,1,0}, d.rotY); break;
         case D_CYL:    drawM(gCyl,    d.pos, d.scale, d.col, d.tex, {0,1,0}, d.rotY); break;
         case D_CONE:   drawM(gCone,   d.pos, d.scale, d.col, d.tex, {0,1,0}, d.rotY); break;
+    }
+}
+// a luminous web-orchid: bright petals, a glowing core, dangling silk. Big and
+// unmistakable so the player always sees where the next swing point is.
+static void DrawWebAnchors(Vector3 camPos){
+    float t = (float)GetTime();
+    for (const auto& a : gWebAnchors){
+        float dist = Vector3Distance(a.pos, camPos);
+        if (dist > 260) continue;
+        if (a.wilt > 0){                              // spent: a shrivelled grey sac, regrowing
+            float k = 1.0f - a.wilt/WEB_WILT;
+            drawM(gSphere, a.pos, {0.16f+0.12f*k,0.20f+0.10f*k,0.16f+0.12f*k}, (Color){120,108,108,235}, TX_STREAK);
+            for (int s=0;s<3;s++){ float ang=s*2.09f;
+                drawM(gSphere, a.pos+(Vector3){cosf(ang)*0.18f,-0.5f,sinf(ang)*0.18f}, {0.06f,0.10f,0.06f},
+                      (Color){108,98,98,220}, TX_WHITE); }
+            continue;
+        }
+        bool near = dist < WEB_RANGE && a.pos.y > camPos.y - 4.0f;
+        float beat = near? 0.6f+0.4f*sinf(t*8.0f) : 0.8f+0.2f*sinf(t*2.8f);
+        float spin = t*0.5f + a.pos.x*0.3f;
+        // a fat sticky sap-pod that oozes the red webbing. Long pointed petals
+        // give it a real flower shape; opaque saturated crimson, not a glow orb.
+        // 8 long pointed petals splaying out and up (the dominant silhouette)
+        for (int p=0;p<8;p++){
+            float ang = spin + p*0.785f;
+            Vector3 dir = { cosf(ang), 0.34f + 0.12f*sinf(t*2.0f+p), sinf(ang) };
+            Color pc = (p%2)? (Color){222,28,40,255} : (Color){248,64,118,255};   // crimson / hot magenta
+            drawConeTo(a.pos, dir, 0.66f, 0.185f, pc, TX_STREAK);
+        }
+        // 5 shorter inner petals, more upright, brighter
+        for (int p=0;p<5;p++){
+            float ang = -spin*0.8f + p*1.257f + 0.4f;
+            Vector3 dir = { cosf(ang)*0.62f, 0.9f, sinf(ang)*0.62f };
+            drawConeTo(a.pos+(Vector3){0,0.04f,0}, dir, 0.40f, 0.15f, (Color){255,120,95,255}, TX_STREAK);
+        }
+        // small tight inner glow (not a big washy orb)
+        drawM(gSphere, a.pos, {0.34f*beat+0.16f, 0.30f*beat+0.14f, 0.34f*beat+0.16f}, (Color){255,70,80,70}, TX_WHITE);
+        // glossy sap bulb + luminous core + a hot specular glint
+        drawM(gSphere, a.pos, {0.27f,0.30f,0.27f}, (Color){196,26,40,255}, TX_STREAK);
+        drawM(gSphere, a.pos+(Vector3){0,0.10f,0}, {0.14f+0.06f*beat,0.14f+0.06f*beat,0.14f+0.06f*beat},
+              (Color){255,225,130,255}, TX_WHITE);
+        drawM(gSphere, a.pos+(Vector3){-0.07f,0.13f,-0.05f}, {0.045f,0.045f,0.045f}, WHITE, TX_WHITE);
+        // dripping sticky sap tendrils with fat glossy droplets
+        for (int s=0;s<3;s++){
+            float ang = t*0.3f + s*2.09f;
+            float droop = 0.95f + 0.3f*sinf(t*1.5f+s);
+            Vector3 tip = a.pos + (Vector3){cosf(ang)*0.28f, -droop, sinf(ang)*0.28f};
+            drawCylBetween(a.pos+(Vector3){0,-0.14f,0}, tip, 0.04f, (Color){205,36,46,255});
+            drawM(gSphere, tip, {0.10f,0.13f,0.10f}, (Color){225,46,58,255}, TX_STREAK);
+            drawM(gSphere, tip+(Vector3){-0.03f,0.03f,0}, {0.03f,0.03f,0.03f}, (Color){255,175,175,220}, TX_WHITE);
+        }
+        // upward wisp so it reads from far; brighter when grabbable
+        DrawCylinder((Vector3){a.pos.x, a.pos.y+5.0f, a.pos.z}, 0.06f, 0.24f, 8, 8,
+                     (Color){255,80,80,(unsigned char)(60+90*(near?beat:0.4f))});
+        if (near){                                    // grab-ready twin halo
+            for (int r=0;r<2;r++)
+                DrawCircle3D(a.pos, 0.62f+r*0.15f+0.08f*sinf(t*6.0f), (Vector3){1,0,0}, 90.0f,
+                             (Color){255,120,120,175});
+        }
+        if (gUnlockT > 2.5f)                          // the unlock: every bloom flares awake
+            DrawCylinder((Vector3){a.pos.x, a.pos.y+16, a.pos.z}, 0.4f, 0.9f, 30, 10,
+                         (Color){255,80,80,(unsigned char)(90*(gUnlockT-2.5f)/2.0f)});
     }
 }
 static void DrawWorld3D(Vector3 camPos){
@@ -216,7 +342,7 @@ static void InitSky(void){
     }
 }
 static void DrawSkyBits(float t){
-    // sun (unlit, default shader — always bright)
+    // sun (unlit, default shader - always bright)
     DrawSphere((Vector3){170,210,-120}, 16, (Color){255,244,180,255});
     DrawSphere((Vector3){170,210,-120}, 13, (Color){255,252,220,255});
     for (auto& c : gSkyClouds){
@@ -230,7 +356,7 @@ static void DrawSkyBits(float t){
 
 // ------------------------------------------------------------- the star ----
 static void DrawStar(float t, bool won){
-    Vector3 sp = STAR_POS; sp.y += sinf(t*1.6f)*0.35f;
+    Vector3 sp = gStarP; sp.y += sinf(t*1.6f)*0.35f;
     float spin = t*60.0f*DEG2RAD * (won? 6.0f : 1.0f);
     Vector3 u = { cosf(spin), 0, sinf(spin) };          // star plane right-vector
     Vector3 n = { -sinf(spin), 0, cosf(spin) };         // plane normal
@@ -251,9 +377,10 @@ static void DrawStar(float t, bool won){
 }
 static void DrawGoalBeam(float t){
     float pulse = 0.75f + 0.25f*sinf(t*2.2f);
-    DrawCylinder((Vector3){STAR_POS.x, 90.5f, STAR_POS.z}, 2.0f*pulse, 2.3f*pulse, 320, 24,
+    float base = gStarP.y - 3.7f;
+    DrawCylinder((Vector3){gStarP.x, base, gStarP.z}, 2.0f*pulse, 2.3f*pulse, 320, 24,
                  (Color){255,196,50,(unsigned char)(58*pulse)});
-    DrawCylinder((Vector3){STAR_POS.x, 90.5f, STAR_POS.z}, 0.7f, 0.85f, 320, 16,
+    DrawCylinder((Vector3){gStarP.x, base, gStarP.z}, 0.7f, 0.85f, 320, 16,
                  (Color){255,232,140,(unsigned char)(78*pulse)});
 }
 

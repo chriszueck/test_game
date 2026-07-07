@@ -4,8 +4,9 @@ rem   build.bat        = game build (no console window)
 rem   build.bat dev    = dev build (keeps console for logs)
 setlocal
 set "DK=%~dp0tools\w64devkit\bin"
+set "RAYLIB_LIB=%~dp0raylib\lib"
 set "FLAGS=-O2 -std=c++17 -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-function -Wno-unused-parameter"
-set "LINK=-Lraylib\lib -lraylib -lopengl32 -lgdi32 -lwinmm -static -static-libgcc -static-libstdc++"
+set "LINK=-L"%RAYLIB_LIB%" -lraylib -lopengl32 -lgdi32 -lwinmm -static -static-libgcc -static-libstdc++"
 set "SUBSYS=-mwindows"
 if /I "%~1"=="dev" set "SUBSYS="
 
