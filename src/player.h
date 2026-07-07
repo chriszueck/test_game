@@ -32,6 +32,10 @@ struct Player {
     // slam dive
     bool  slamming = false;
     float slamT = 0, stunT = 0;
+    // skysail hang-glider
+    bool  sailing = false;
+    float sailOpen = 0, sailTilt = 0;      // 0..1 deploy, -1..1 dive/flare
+    bool  inUpdraft = false;
     // progress
     float apexY = 0; bool wasGrounded = true;
     float stepT = 0; int stepAlt = 0;
@@ -348,6 +352,31 @@ static void PlayerUpdate(float dt, bool inputLocked){
         pl.slamT += dt;
         if (pl.grounded) pl.slamming = false;
     }
+    // ---- skysail: hold SHIFT airborne to hang-glide (SKYHAVEN only)
+    Vector3 sf = yawFwd(pl.yaw), sr = { -sf.z, 0, sf.x };
+    bool sailHeld = ((!inputLocked && gUnlockSail && IsKeyDown(KEY_LEFT_SHIFT)) || gBotSail);
+    if (sailHeld && !pl.grounded && !pl.webSwinging && !pl.planting && pl.stunT <= 0){
+        if (!pl.sailing){ pl.sailing = true; pl.charging = false; pl.pendT = 0; SND(sWhoosh, 0.7f, 0.45f); }
+    } else pl.sailing = false;
+    if (pl.sailing){
+        float tiltTgt = 0.0f;
+        if (IsKeyDown(KEY_W) || gBotFwd) tiltTgt =  1.0f;    // dive (tuck)
+        if (IsKeyDown(KEY_S))            tiltTgt = -1.0f;    // flare (brake/rise a touch)
+        pl.sailTilt += (tiltTgt - pl.sailTilt)*fminf(1.0f, dt*6.0f);
+        if (pl.sailTilt > 0){                                // dive builds forward speed
+            pl.vel.x += sf.x*SAIL_DIVE*pl.sailTilt*dt;
+            pl.vel.z += sf.z*SAIL_DIVE*pl.sailTilt*dt;
+        } else if (pl.sailTilt < 0){                          // flare bleeds speed
+            pl.vel.x *= (1.0f - 0.9f*(-pl.sailTilt)*dt);
+            pl.vel.z *= (1.0f - 0.9f*(-pl.sailTilt)*dt);
+        }
+        if (IsKeyDown(KEY_D)){ pl.vel.x += sr.x*SAIL_STEER*dt; pl.vel.z += sr.z*SAIL_STEER*dt; }
+        if (IsKeyDown(KEY_A)){ pl.vel.x -= sr.x*SAIL_STEER*dt; pl.vel.z -= sr.z*SAIL_STEER*dt; }
+        float hs = sqrtf(pl.vel.x*pl.vel.x + pl.vel.z*pl.vel.z);
+        float hcap = 15.0f + 11.0f*fmaxf(0.0f, pl.sailTilt);
+        if (hs > hcap){ pl.vel.x *= hcap/hs; pl.vel.z *= hcap/hs; }
+    }
+    pl.sailOpen += ((pl.sailing?1.0f:0.0f) - pl.sailOpen)*fminf(1.0f, dt*9.0f);
     // ---- run
     Vector3 f = yawFwd(pl.yaw), r = { -f.z, 0, f.x };   // r = screen-right = cross(f, up)
     Vector3 wish = {0,0,0};
@@ -369,7 +398,7 @@ static void PlayerUpdate(float dt, bool inputLocked){
         pl.vel.z += wish.z*aa*dt;
     }
     // ---- vault charge
-    bool hold = !inputLocked && pl.stunT <= 0
+    bool hold = !inputLocked && pl.stunT <= 0 && !pl.sailing
              && (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsKeyDown(KEY_SPACE) || gBotHold);
     pl.vaultCD = fmaxf(0.0f, pl.vaultCD - dt);
     if (hold && !pl.charging && pl.vaultCD <= 0 && !pl.webSwinging){
@@ -402,9 +431,25 @@ static void PlayerUpdate(float dt, bool inputLocked){
         }
     }
     if (!pl.charging) pl.poleAngle = fmaxf(0.0f, pl.poleAngle - dt*420.0f);
+    // ---- updraft columns lift you (a lot under sail); ambient wind pushes you
+    pl.inUpdraft = false;
+    for (auto& u : gUpdrafts){
+        float dx = pl.pos.x - u.base.x, dz = pl.pos.z - u.base.z;
+        if (dx*dx + dz*dz < u.rad*u.rad && pl.pos.y > u.base.y && pl.pos.y < u.base.y + u.hgt){
+            pl.inUpdraft = true;
+            pl.vel.y += u.str * (pl.sailing? 1.0f : 0.45f) * dt;
+            pl.vel.x -= dx*0.9f*dt; pl.vel.z -= dz*0.9f*dt;   // gentle inward pull
+        }
+    }
+    if (!pl.grounded){
+        float wk = pl.sailing? SAIL_WINDK : 0.22f;
+        pl.vel.x += gAirWind.x*wk*dt; pl.vel.z += gAirWind.z*wk*dt;
+    }
     // ---- gravity + integrate with substeps (fast falls can't tunnel)
-    pl.vel.y -= (pl.slamming? SLAM_GRAV : (pl.vel.y > 0 ? GRAV_UP : GRAV_DOWN))*dt;
-    pl.vel.y = fmaxf(pl.vel.y, pl.slamming? -SLAM_TERM : -TERMINAL);
+    float grv = pl.slamming? SLAM_GRAV : pl.sailing? SAIL_GRAV : (pl.vel.y > 0 ? GRAV_UP : GRAV_DOWN);
+    pl.vel.y -= grv*dt;
+    float term = pl.slamming? -SLAM_TERM : pl.sailing? -(SAIL_TERM + 13.0f*fmaxf(0.0f,pl.sailTilt)) : -TERMINAL;
+    pl.vel.y = fmaxf(pl.vel.y, term);
     gLandImpact = 0; gLandedSolidGround = false;
     float maxd = fmaxf(fabsf(pl.vel.x), fmaxf(fabsf(pl.vel.y), fabsf(pl.vel.z)))*dt;
     int steps = (int)ceilf(maxd/0.28f); if (steps < 1) steps = 1; if (steps > 48) steps = 48;
@@ -630,6 +675,11 @@ static void DrawBodyFP(const Camera3D& cam, float t){
         float k2 = fmaxf(0.0f, k - 0.15f);                 // second leg lags the whip
         aL = 15 + 84*k;    sL = aL + 20*k;                 // shin EXTENDS: toes forward-up
         aR = 12 + 78*k2;   sR = aR + 16*k2;
+    } else if (pl.sailing){                                // gliding: legs stretched back, relaxed sway
+        float sw = sinf(t*2.6f)*5.0f;
+        float back = -30.0f - 22.0f*fmaxf(0.0f, pl.sailTilt);
+        aL = back + sw;      sL = aL - 16;
+        aR = back - 6 - sw;  sR = aR - 20;
     } else if (pl.webSwinging){
         float trail = -clampf(hsp*1.8f, 0.0f, 38.0f);      // legs stream behind the swing
         aL = trail;      sL = aL - 24;
@@ -650,6 +700,31 @@ static void DrawBodyFP(const Camera3D& cam, float t){
 
 static void DrawPoleFP(const Camera3D& cam, float t){
     DrawBodyFP(cam, t);
+    if (pl.sailOpen > 0.03f){
+        // the SKYSAIL: a wide striped cloth canopy billowing overhead, gripped
+        // by both arms. Dive tips it forward/down, flare lifts it.
+        float op = pl.sailOpen;
+        Vector3 fwd = Vector3Normalize(cam.target - cam.position);
+        Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, (Vector3){0,1,0}));
+        Vector3 center = cam.position + fwd*(0.55f + 0.45f*op)
+                       + (Vector3){0, 0.95f*op - 0.35f*pl.sailTilt, 0};
+        int NP = 7;
+        for (int i=0;i<NP;i++){
+            float u = (i/(float)(NP-1) - 0.5f);              // -0.5..0.5 across the sail
+            float billow = sinf(t*4.5f + i*0.9f)*0.07f*op;
+            Vector3 p = center + right*(u*2.3f*op) + fwd*(-0.55f*u*u*op)
+                      + (Vector3){0, billow - 0.25f*u*u*op, 0};
+            Color cc = (i%2)? (Color){238,74,84,255} : (Color){246,246,250,255};   // red/white
+            drawM(gCube, p, {0.36f*op, 0.055f, 0.52f*op}, cc, TX_CLOTH, right, -18.0f*pl.sailTilt);
+        }
+        Vector3 barL = center + right*(-1.05f*op), barR = center + right*(1.05f*op);
+        drawCylBetween(barL, barR, 0.028f, C_WOOD);           // spar
+        drawCylBetween(cam.position + right*0.34f + (Vector3){0,-0.5f,0}, barR, 0.045f, C_SLEEVE);
+        drawCylBetween(cam.position - right*0.34f + (Vector3){0,-0.5f,0}, barL, 0.045f, C_SLEEVE);
+        drawM(gSphere, barR, {0.06f,0.06f,0.06f}, WHITE, TX_WHITE);
+        drawM(gSphere, barL, {0.06f,0.06f,0.06f}, WHITE, TX_WHITE);
+        return;
+    }
     if (pl.webSwinging){
         // sticky red mushroom SAP stretched from your hand to the pod: a thick
         // goopy rope, bulging where it clings and pulled thin in the middle,

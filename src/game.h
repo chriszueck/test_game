@@ -79,7 +79,7 @@ static inline Color ctint(Color c, float m){
 
 // ------------------------------------------------------------- world types -
 enum Surf { S_GRASS, S_STONE, S_BRICK, S_WOOD, S_QBLOCK, S_PIPE,
-            S_SHROOM_TAN, S_SHROOM_RED, S_CLOUD, S_GOLD, S_DARK, S_SAND };
+            S_SHROOM_TAN, S_SHROOM_RED, S_CLOUD, S_GOLD, S_DARK, S_SAND, S_SKYSTONE };
 
 struct Solid {
     bool    isCyl;
@@ -98,7 +98,7 @@ struct Decor {
 };
 
 // autopilot flags for the --demo verification mode (OR'd into real input)
-static bool gBotHold = false, gBotFwd = false, gBotWeb = false, gBotSlam = false;
+static bool gBotHold = false, gBotFwd = false, gBotWeb = false, gBotSlam = false, gBotSail = false;
 
 // web swing: how far a web bloom can be grabbed from
 static const float WEB_RANGE = 15.0f;
@@ -124,8 +124,26 @@ static const float SPORE_CD    = 5.0f;     // regrow time after pickup
 // mechanics unlock as the worlds introduce them (persisted in the save)
 static bool gUnlockWeb  = false;           // won at the Weaver's Bloom (Megashroom)
 static bool gUnlockSlam = false;           // won at the Thunder Shrine (Gorge)
-struct Shrine { Vector3 p; int type; };    // type 0 = web, 1 = slam
+static bool gUnlockSail = false;           // SKYHAVEN: hold SHIFT to hang-glide
+struct Shrine { Vector3 p; int type; };    // type 0 = web, 1 = slam, 2 = sail
 static std::vector<Shrine> gShrines;
+
+// SKYHAVEN wind kingdom: updraft columns, windmills, banners, ambient wind
+struct Updraft { Vector3 base; float rad, hgt, str; };   // a rising air column
+static std::vector<Updraft> gUpdrafts;
+struct Windmill { Vector3 pos; float rad, tilt, spd; int blades; Color col; };
+static std::vector<Windmill> gWindmills;
+struct Banner { Vector3 top; float len, w; Color col; float phase; };
+static std::vector<Banner> gBanners;
+struct Pinwheel { Vector3 pos; float rad, spd; Color a, b; };
+static std::vector<Pinwheel> gPinwheels;
+static Vector3 gAirWind = {0,0,0};          // ambient wind (per-level), pushes gliders
+static const float SAIL_GRAV   = 8.0f;      // gentle glide gravity (vs 46 falling)
+static const float SAIL_TERM   = 7.0f;      // glide terminal fall speed
+static const float SAIL_STEER  = 26.0f;     // WASD authority under sail
+static const float SAIL_DIVE   = 22.0f;     // W: tuck & accelerate forward+down
+static const float SAIL_WINDK  = 1.0f;      // how hard ambient wind pushes a glider
+static const float UPDRAFT_LIFT= 30.0f;     // upward accel inside a column (sailing)
 
 // ambient life: fireflies / butterflies / petals orbiting anchor points
 struct Mote { Vector3 p; Color c; float r, spd; };

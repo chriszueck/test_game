@@ -56,6 +56,16 @@ bailed into a red mushroom, and every fall goes exactly as far as you earned.
 - **giant shroom stack** in the east courtyard → beams bolted to the keep
 - bold **gap-bricks** straight across — long sprint-vaults, big air
 
+### Level 5: SKYHAVEN
+A kingdom of colossal windmills in the open sky, built around the **SKYSAIL**.
+Vault off a terrace, then **hold SHIFT to unfurl a hang-glider**: you glide on
+the wind (which pushes every flight eastward), **W** tucks into a dive for
+speed, **S** flares to brake, **A/D** steer. Sail into a swirling **updraft**
+and it catapults you skyward. The loop: vault → sail → catch the lift → line up
+the next terrace → land. Miss your line and the wind carries you into the blue.
+The star crowns the great mill — ride its gust up to claim it. Reach it via the
+flagged warp pipe (the pipes now cycle all five worlds).
+
 ### Level 4: THE GORGE
 The longest and hardest climb: a quarried canyon of strata, pines, hanging
 vines, crystals, a river and a waterfall — built entirely around the SLAM.

@@ -145,6 +145,30 @@ static void LoadTextures(void){
             ImageDrawRectangle(&im, 0, 12+r*20+GetRandomValue(-3,3), 128, 2, (Color){206,180,140,255});
         gTex[TX_SAND] = makeTex(im, true);
     }
+    { // sky-stone: pale cloud-marble, cool blue-white blocks with soft veins
+        Image im = GenImageColor(128,128,(Color){222,232,244,255});
+        for (int row=0; row<6; row++){
+            int off = (row%2)*42;
+            for (int cx=-42; cx<128; cx+=42){
+                int v = GetRandomValue(0,14);
+                Color blk = { (unsigned char)(236-v),(unsigned char)(242-v),(unsigned char)(252-v),255 };
+                ImageDrawRectangle(&im, cx+off+2, row*22+2, 40, 20, blk);
+                ImageDrawRectangle(&im, cx+off+2, row*22+2, 40, 3, (Color){250,253,255,255});
+            }
+        }
+        for (int i=0;i<40;i++)                               // faint cool veins
+            ImageDrawRectangle(&im, GetRandomValue(0,120), GetRandomValue(0,124),
+                               GetRandomValue(4,14), 1, (Color){198,214,236,255});
+        gTex[TX_SKY] = makeTex(im, true);
+    }
+    { // canvas cloth: bold vertical stripes for banners & the sail
+        Image im = GenImageColor(64,64,(Color){245,245,248,255});
+        for (int s=0;s<4;s++)
+            ImageDrawRectangle(&im, s*16, 0, 8, 64, (Color){228,228,236,255});
+        for (int y=0;y<64;y+=6)                              // horizontal weave
+            ImageDrawRectangle(&im, 0, y, 64, 1, (Color){214,214,224,255});
+        gTex[TX_CLOTH] = makeTex(im, true);
+    }
     { // ? block
         Image im = GenImageColor(128,128,C_GOLD);
         Color edge = {182,120,20,255}, riv = {120,74,12,255};
@@ -231,6 +255,7 @@ static void DrawSolid(const Solid& s, int idx){
         case S_WOOD:   tex = TX_WOOD;  break;
         case S_PIPE:   tex = TX_PIPEG; tint = C_PIPE; break;
         case S_SAND:   tex = TX_SAND;  break;
+        case S_SKYSTONE: tex = TX_SKY; break;
         case S_GOLD:   tint = C_GOLD;  break;
         case S_DARK:   tint = {70,60,55,255}; break;
         case S_CLOUD:  tint = C_CLOUD; break;

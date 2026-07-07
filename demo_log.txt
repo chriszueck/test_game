@@ -152,6 +152,34 @@ t=15.1 pos=(-23.60, 21.65, 50.00) vel=(  0.0, 27.9,  0.0) gnd=0 chg=0 web=0 vaul
 t=15.2 pos=(-23.60, 24.25, 50.00) vel=(  0.0, 24.5,  0.0) gnd=0 chg=0 web=0 vaults=2 fouls=1
 t=15.3 pos=(-23.60, 26.52, 50.00) vel=(  0.0, 21.1,  0.0) gnd=0 chg=0 web=0 vaults=2 fouls=1
 t=15.4 pos=(-23.60, 28.44, 50.00) vel=(  0.0, 17.7,  0.0) gnd=0 chg=0 web=0 vaults=2 fouls=1
-t=15.5 pos=(-23.60, 30.03, 50.00) vel=(  0.0, 14.3,  0.0) gnd=0 chg=0 web=0 vaults=2 fouls=1
-t=15.6 pos=(-23.60, 31.27, 50.00) vel=(  0.0, 10.9,  0.0) gnd=0 chg=0 web=0 vaults=2 fouls=1
-SUMMARY maxY=42.00 vaults=2 fouls=1 falls=0 final=(-23.6,31.3,50.0)
+t=15.5 pos=(-49.99,  5.52,  0.01) vel=(  0.3, -4.2,  0.2) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=15.6 pos=(-49.93,  5.23,  0.04) vel=(  0.8, -1.6,  0.4) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=15.7 pos=(-49.82,  5.21,  0.10) vel=(  1.3,  1.0,  0.7) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=15.8 pos=(-49.67,  5.45,  0.18) vel=(  1.8,  3.6,  0.9) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=15.9 pos=(-49.47,  5.95,  0.28) vel=(  2.2,  6.2,  1.1) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.0 pos=(-49.22,  6.70,  0.41) vel=(  2.7,  8.8,  1.4) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.1 pos=(-48.93,  7.72,  0.56) vel=(  3.1, 11.4,  1.6) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.2 pos=(-48.60,  9.00,  0.73) vel=(  3.5, 14.0,  1.8) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.3 pos=(-48.23, 10.54,  0.91) vel=(  3.8, 16.6,  1.9) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.4 pos=(-47.83, 12.33,  1.12) vel=(  4.2, 19.2,  2.1) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.5 pos=(-47.40, 14.39,  1.33) vel=(  4.5, 21.8,  2.2) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.6 pos=(-46.94, 16.71,  1.56) vel=(  4.7, 24.4,  2.4) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.7 pos=(-46.46, 19.28,  1.81) vel=(  4.9, 27.0,  2.5) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.8 pos=(-45.96, 22.12,  2.06) vel=(  5.1, 29.6,  2.5) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=16.9 pos=(-45.42, 25.03,  2.32) vel=(  5.6, 28.8,  2.7) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.0 pos=(-44.84, 27.87,  2.60) vel=(  6.1, 28.0,  2.9) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.1 pos=(-44.21, 30.62,  2.89) vel=(  6.6, 27.2,  3.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.2 pos=(-43.52, 33.29,  3.20) vel=(  7.1, 26.4,  3.2) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.3 pos=(-42.79, 35.89,  3.53) vel=(  7.6, 25.6,  3.3) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.4 pos=(-42.01, 38.40,  3.87) vel=(  8.1, 24.8,  3.5) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.5 pos=(-41.17, 40.83,  4.23) vel=(  8.6, 24.0,  3.7) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.6 pos=(-40.29, 43.19,  4.61) vel=(  9.1, 23.2,  3.8) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.7 pos=(-39.38, 45.32,  4.99) vel=(  9.2, 19.8,  3.9) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.8 pos=(-38.45, 47.11,  5.38) vel=(  9.3, 16.4,  3.9) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=17.9 pos=(-37.52, 48.56,  5.77) vel=(  9.4, 13.0,  3.9) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=18.0 pos=(-36.57, 49.68,  6.17) vel=(  9.5,  9.6,  4.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=18.1 pos=(-35.62, 50.45,  6.56) vel=(  9.6,  6.2,  4.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=18.2 pos=(-34.65, 50.88,  6.97) vel=(  9.7,  2.8,  4.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=18.3 pos=(-33.67, 50.97,  7.37) vel=(  9.8, -0.8,  4.1) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=18.4 pos=(-32.68, 50.64,  7.78) vel=(  9.9, -5.4,  4.1) gnd=0 chg=0 web=0 vaults=0 fouls=0
+SUMMARY maxY=50.98 vaults=0 fouls=0 falls=0 final=(-32.7,50.6,7.8)

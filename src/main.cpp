@@ -270,6 +270,59 @@ static void DrawUnlockOrb(const Camera3D& cam){
         drawM(gSphere, op, {s,s,s}, WHITE, TX_WHITE);
     }
 }
+// ---- SKYHAVEN: windmills, banners, pinwheels, updraft columns -------------
+static void DrawWindmills(float t){
+    for (auto& w : gWindmills){
+        float ang = t*w.spd*DEG2RAD + w.tilt;
+        drawM(gSphere, w.pos, {w.rad*0.14f, w.rad*0.14f, w.rad*0.14f}, ctint(w.col,0.75f), TX_STONE);
+        for (int i=0;i<w.blades;i++){
+            float a = ang + i*(6.2832f/w.blades);
+            Vector3 dir = {0, -sinf(a), cosf(a)};              // Y-Z plane: faces along X (the travel axis)
+            Vector3 mid = w.pos + dir*(w.rad*0.52f);
+            drawM(gCube, mid, {0.12f, w.rad*0.32f, w.rad*1.04f}, (i%2)? w.col : ctint(w.col,1.12f),
+                  TX_CLOTH, (Vector3){1,0,0}, a*RAD2DEG);        // cloth sail
+            drawCylBetween(w.pos, w.pos + dir*w.rad, w.rad*0.04f, C_WOOD);    // spar
+        }
+    }
+}
+static void DrawBanners(float t){
+    for (auto& b : gBanners){
+        int N = 6; Vector3 prev = b.top;
+        for (int i=1;i<=N;i++){
+            float fr = (float)i/N;
+            float wave = sinf(t*3.2f + b.phase + fr*4.0f)*0.55f*fr;
+            Vector3 p = b.top + (Vector3){wave + gAirWind.x*0.05f*fr, -b.len*fr, gAirWind.z*0.05f*fr};
+            drawM(gCube, (prev+p)*0.5f, {b.w, b.len/N*1.12f, 0.05f},
+                  (i%2)? b.col : ctint(b.col,0.85f), TX_CLOTH);
+            prev = p;
+        }
+    }
+}
+static void DrawPinwheels(float t){
+    for (auto& p : gPinwheels){
+        float a0 = t*p.spd*DEG2RAD;
+        for (int k=0;k<6;k++){
+            float a = a0 + k*1.047f;
+            Vector3 dir = {0, -sinf(a), cosf(a)};              // faces along X, like the mills
+            drawM(gCube, p.pos + dir*(p.rad*0.5f), {0.04f, p.rad*0.4f, p.rad},
+                  (k%2)? p.a : p.b, TX_CLOTH, (Vector3){1,0,0}, a*RAD2DEG);
+        }
+        drawM(gSphere, p.pos, {0.08f,0.08f,0.08f}, C_GOLD, TX_WHITE);
+    }
+}
+static void DrawUpdrafts(float t){
+    for (auto& u : gUpdrafts){
+        DrawCylinder(u.base, u.rad, u.rad*0.4f, u.hgt, 18, (Color){205,228,255,24});   // faint spout
+        for (int k=0;k<12;k++){
+            float ph = t*1.6f + k*0.83f;
+            float yy = fmodf(ph*3.4f + k*2.1f, u.hgt);
+            float a  = ph*2.4f + k;
+            float rr = u.rad*(0.28f + 0.55f*(0.5f+0.5f*sinf(k*1.7f)));
+            drawM(gSphere, {u.base.x+cosf(a)*rr, u.base.y+yy, u.base.z+sinf(a)*rr},
+                  {0.15f,0.15f,0.15f}, (Color){236,246,255,190}, TX_WHITE);
+        }
+    }
+}
 // ambient motes: butterflies / petals / fireflies wandering their anchors
 static void DrawMotes(float t){
     for (size_t i=0;i<gMotes.size();i++){
@@ -443,6 +496,7 @@ static void SetLevelUnlocks(float resumeY){
     bool pastSlam = (gLevel == 3 && resumeY >  6.0f);   // resumed up a Gorge shaft, past the mouth
     gUnlockWeb  = (gLevel == 2 || gLevel == 3) || pastWeb;
     gUnlockSlam = pastSlam;
+    gUnlockSail = (gLevel == 4);                        // SKYHAVEN: the hang-glider is the world
 }
 static void LoadSave(void){
     char* txt = LoadFileText(gSavePath);
@@ -453,7 +507,7 @@ static void LoadSave(void){
     gTotFalls  = (int)readKey(txt,"totFalls",0);
     gTotVaults = (int)readKey(txt,"totVaults",0);
     int lv = (int)readKey(txt,"level",0);
-    if (lv >= 1 && lv <= 3 && gLevel != lv){
+    if (lv >= 1 && lv <= 4 && gLevel != lv){
         BuildWorld(lv);                               // resume on the saved level
         pl.pos = gSpawn;
     }
@@ -549,6 +603,16 @@ static void DrawHUD(float t){
         DrawCircle(W/2, H/2, 8.0f + 3.0f*webHint, (Color){120,220,255,(unsigned char)(60 + 80*webHint)});
         drawTextC("WEB", W/2, H/2 + 44, 18, (Color){130,220,255,(unsigned char)(180 + 55*webHint)});
     }
+    // skysail / updraft state
+    if (pl.sailing){
+        float pulse = 0.7f + 0.3f*sinf((float)GetTime()*7.0f);
+        Color sc = pl.inUpdraft? (Color){130,240,150,(unsigned char)(230*pulse)}
+                               : (Color){205,228,255,220};
+        drawTextC(pl.inUpdraft? ">> UPDRAFT <<" : "~ SAIL ~", W/2, H/2 + 44, 19, sc);
+        if (pl.inUpdraft)                                 // rising chevrons
+            for (int k=0;k<3;k++)
+                DrawCircleLines(W/2, H/2, 16.0f + k*7.0f + 5.0f*pulse, (Color){130,240,150,120});
+    }
     // spore boost: golden ring counting down around the crosshair
     if (gBoostT > 0){
         float frac = gBoostT/BOOST_DUR;
@@ -622,9 +686,10 @@ static void DrawHUD(float t){
     }
     // early controls hint - only the powers you actually own
     if (t < 22 && !gWon){
-        char hint[220] = "WASD run  ·  LMB charge + release: VAULT";
+        char hint[260] = "WASD run  ·  LMB charge + release: VAULT";
         if (gUnlockWeb)  strcat(hint, "  ·  RMB near blooms: swing");
         if (gUnlockSlam) strcat(hint, "  ·  SHIFT mid-air: SLAM");
+        if (gUnlockSail) strcat(hint, "  ·  hold SHIFT mid-air: SAIL");
         strcat(hint, "  ·  ESC pause");
         drawTextC(hint, W/2, H-30, 18, (Color){255,255,255,150});
     }
@@ -671,6 +736,7 @@ static void DrawPause(void){
     lines[nl++] = "red mushrooms are trampolines. aim for them when you fall";
     if (gUnlockWeb)  lines[nl++] = "hold RMB near a glowing web bloom: swing. let go to fly with it";
     if (gUnlockSlam) lines[nl++] = "SHIFT mid-air: SLAM. slam a red at the last blink: PERFECT boing";
+    if (gUnlockSail) lines[nl++] = "hold SHIFT mid-air: SKYSAIL. W dive, S flare, A/D steer, ride updrafts";
     lines[nl++] = "?-blocks pop a coin on first touch. many roads up, no checkpoints";
     lines[nl++] = "step on a warp pipe to travel to ANY world (new powers at shrines)";
     lines[nl++] = "";
@@ -689,9 +755,10 @@ static void DrawPause(void){
 static bool gWonMenu = false;      // the choice panel after touching the star
 static void DrawWinPanel(void){
     int W = GetScreenWidth(), H = GetScreenHeight();
-    static const char* titles[4] = {
+    static const char* titles[5] = {
         "* YOU VAULTED THE CASTLE *", "* THE MEGASHROOM IS CLIMBED *",
-        "* THE SPOREWAY IS CROSSED *", "* THE GORGE IS CONQUERED *" };
+        "* THE SPOREWAY IS CROSSED *", "* THE GORGE IS CONQUERED *",
+        "* SKYHAVEN IS YOURS *" };
     DrawPanelBG(640, 388);
     int y = (H-388)/2 + 30;
     drawTextC(titles[gLevel], W/2, y, 32, C_GOLD); y += 52;
@@ -725,6 +792,7 @@ static void RenderAll(Camera3D cam, float t, bool hud){
         DrawSpores(t);
         DrawShrines(t);
         DrawUnlockOrb(cam);
+        if (gLevel == 4){ DrawUpdrafts(t); DrawWindmills(t); DrawBanners(t); DrawPinwheels(t); }
         DrawMotes(t);
         DrawStar(t, gWon);
         DrawGoalBeam(t);
@@ -767,8 +835,15 @@ static void ShotMode(void){
         {{0,24.0f,200},     0,  55, 0,     "shotG4.png"},   // inside the Throat, looking up
         {{2,79.0f,224},     0,   4, 0,     "shotG5.png"},   // crown: the star pinnacle
     };
-    const Preset* P = (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
-    int n = (gLevel==3)? 5 : gLevel? 4 : 5;
+    static const Preset sky2[5] = {
+        {{-64,3.91f,0},    75,  6, 0,      "shotK1.png"},   // launch terrace, route ahead
+        {{-40,21.91f,5},   80, 10, 0,      "shotK2.png"},   // updrafts + turbine windmills
+        {{-14,41.91f,10},  90,  8, 0,      "shotK3.png"},   // mid-climb over the sky
+        {{20,60.0f,-4},    70, 12, 0,      "shotK4.png"},   // toward the great mill
+        {{40,80.0f,0},     90,  2, 0,      "shotK5.png"},   // the great mill + star crown
+    };
+    const Preset* P = (gLevel==4)? sky2 : (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
+    int n = (gLevel==2)? 4 : (gLevel==1)? 4 : 5;
     for (int i=0;i<n;i++){
         pl.pos = P[i].pos; pl.yaw = P[i].yawD*DEG2RAD; pl.pitch = P[i].pitchD*DEG2RAD;
         pl.charging = P[i].charge > 0;
@@ -792,8 +867,8 @@ static void DemoMode(void){
     const float dt = 1.0f/120.0f;
     float T = 0, maxY = 0;
     int rf = 0; bool shotA = false, shotB = false, webPhase = false;
-    bool boostPhase = false, slamPhase = false, edgePhase = false;
-    while (T < 15.6f && !WindowShouldClose()){
+    bool boostPhase = false, slamPhase = false, edgePhase = false, sailPhase = false;
+    while (T < 18.4f && !WindowShouldClose()){
         gBotFwd  = (T > 0.4f && T < 2.2f) || (T > 3.4f && T < 4.0f) || (T > 8.1f && T < 9.05f);
         gBotHold = (T > 1.05f && T < 2.2f) || (T > 3.5f && T < 5.0f)   // vault #1, then over-hold -> FOUL
                 || (T > 8.2f && T < 9.15f);                            // boosted PERFECT vault
@@ -818,6 +893,12 @@ static void DemoMode(void){
             edgePhase = true;
             pl.pos = {-23.6f, 42.0f, 50}; pl.vel = {0,0,0}; pl.yaw = 0;   // 2.4 off the -26 center
         }
+        if (!sailPhase && T > 15.4f){    // phase 7: SKYHAVEN sail + updraft (drop into a column)
+            sailPhase = true;
+            BuildWorld(4); gUnlockSail = true;
+            pl = Player(); pl.pos = {-50, 6.0f, 0}; pl.vel = {0,-4,0}; pl.yaw = 1.4f;  // over updraft U0
+        }
+        gBotSail = (T > 15.45f && T < 17.6f);    // hold the sail: should RISE in the column, then glide
         PlayerUpdate(dt, false);
         maxY = fmaxf(maxY, pl.pos.y);
         T += dt;
@@ -833,7 +914,7 @@ static void DemoMode(void){
         if (!shotA && T > 2.62f){ TakeScreenshot("demo_flight.png"); shotA = true; }   // vault kick
         if (!shotB && T > 5.9f){ TakeScreenshot("demo_swing.png"); shotB = true; }     // web swing
     }
-    gBotFwd = gBotHold = gBotWeb = gBotSlam = false; gBoostT = 0;
+    gBotFwd = gBotHold = gBotWeb = gBotSlam = gBotSail = false; gBoostT = 0;
     if (lf){
         fprintf(lf, "SUMMARY maxY=%.2f vaults=%d fouls=%d falls=%d final=(%.1f,%.1f,%.1f)\n",
                 maxY, pl.vaults, pl.fouls, pl.falls, pl.pos.x, pl.pos.y, pl.pos.z);
@@ -883,6 +964,13 @@ static Trig gTrigsSky[] = {
     {48.0f, "Spore, vault, land, TURN, vault. No dawdling.", false},
     {68.0f, "One long swing to the star. Time the release. Fly.", false},
 };
+static Trig gTrigsSky2[] = {
+    { 5.0f, "SKYHAVEN. Vault off, then HOLD SHIFT to unfurl your skysail.", false},
+    {12.0f, "Glide into a swirling UPDRAFT to soar. W dives for speed, S flares.", false},
+    {28.0f, "Steer A/D and read the wind - it pushes every glide eastward.", false},
+    {50.0f, "Chain it: vault, sail, catch the lift, line up the next terrace.", false},
+    {74.0f, "The great mill. One last soar to its crown and the star.", false},
+};
 static Trig gTrigsGorge[] = {
     { 3.5f, "THE GORGE. Press SHIFT mid-air to SLAM. Slam a red cap: mega-boing.", false},
     { 8.5f, "Slam LATE - a blink before impact - for a PERFECT. Chain them to climb.", false},
@@ -899,11 +987,12 @@ static void ApplyLevelMeta(void){
     if      (gLevel == 1){ gTrigs = gTrigsTower;  gTrigN = (int)(sizeof(gTrigsTower)/sizeof(Trig)); }
     else if (gLevel == 2){ gTrigs = gTrigsSky;    gTrigN = (int)(sizeof(gTrigsSky)/sizeof(Trig)); }
     else if (gLevel == 3){ gTrigs = gTrigsGorge;  gTrigN = (int)(sizeof(gTrigsGorge)/sizeof(Trig)); }
+    else if (gLevel == 4){ gTrigs = gTrigsSky2;   gTrigN = (int)(sizeof(gTrigsSky2)/sizeof(Trig)); }
     else                 { gTrigs = gTrigsCastle; gTrigN = (int)(sizeof(gTrigsCastle)/sizeof(Trig)); }
     for (int i=0;i<gTrigN;i++) gTrigs[i].done = false;
 }
 static void GoToLevel(int lv){
-    BuildWorld(((lv % 4) + 4) % 4);
+    BuildWorld(((lv % 5) + 5) % 5);
     pl = Player();
     pl.pos = gSpawn; pl.apexY = gSpawn.y;
     gWon = false; gWonMenu = false; gTime = 0; gTimerStarted = false;
@@ -913,21 +1002,23 @@ static void GoToLevel(int lv){
     ApplyLevelMeta();
     gMsgs.clear();
     SND(sPop, 0.6f, 0.9f); SND(sWhoosh, 0.7f, 0.8f);
-    static const char* names[4] = {
+    static const char* names[5] = {
         "Back to the castle meadow.",
         "* THE MEGASHROOM *  climb high, bounce well.",
         "* THE SPOREWAY *  swing far, chain the spores.",
-        "* THE GORGE *  slam late. Climb the thunder." };
+        "* THE GORGE *  slam late. Climb the thunder.",
+        "* SKYHAVEN *  ride the wind. Hold SHIFT to sail." };
     MSG(names[gLevel], 4.5f);
     SaveGame();
 }
-static void SwitchLevel(void){ GoToLevel((gLevel + 1) % 4); }
+static void SwitchLevel(void){ GoToLevel((gLevel + 1) % 5); }
 
 int main(int argc, char** argv){
     bool shot  = (argc > 1) && (strcmp(argv[1], "--shot") == 0);
     bool shotb = (argc > 1) && (strcmp(argv[1], "--shotb") == 0);
     bool shotc = (argc > 1) && (strcmp(argv[1], "--shotc") == 0);
     bool shotd = (argc > 1) && (strcmp(argv[1], "--shotd") == 0);
+    bool shote = (argc > 1) && (strcmp(argv[1], "--shote") == 0);
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1600, 900, "ShroomVault - a foddian pole vault");
@@ -937,10 +1028,10 @@ int main(int argc, char** argv){
     int rr = GetMonitorRefreshRate(GetCurrentMonitor());
     SetTargetFPS((int)clampf((float)rr, 60, 144));
     snprintf(gSavePath, sizeof(gSavePath), "%sshroomvault_save.txt", GetApplicationDirectory());
-    LoadGfx(); InitSky(); BuildWorld(shotd? 3 : shotc? 2 : shotb? 1 : 0);
+    LoadGfx(); InitSky(); BuildWorld(shote? 4 : shotd? 3 : shotc? 2 : shotb? 1 : 0);
     for (auto& s : solids) if (s.surf == S_QBLOCK) gQTotal++;
 
-    if (shot || shotb || shotc || shotd){ ShotMode(); CloseWindow(); return 0; }
+    if (shot || shotb || shotc || shotd || shote){ ShotMode(); CloseWindow(); return 0; }
     if (argc > 1 && strcmp(argv[1], "--demo") == 0){ DemoMode(); CloseWindow(); return 0; }
 
     LoadAudioAll(); InitWind(); StartMusic(); LoadSave();
