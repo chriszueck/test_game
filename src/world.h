@@ -1061,7 +1061,7 @@ static void BuildGorge(void){
 static void BuildSkyhaven(void){
     gSpawn = { -64, 2.91f, 0 };
     gStarP = { 52, 150.6f, 0 };               // the star now crowns a 150 m tower
-    gAirWind = { 5.5f, 0.0f, 2.4f };          // a stiff easterly with a nagging crosswind
+    gAirWind = { 4.0f, 0.0f, 1.6f };          // a steady easterly with a nagging crosswind
 
     // a soft distant cloud-floor far below (pure decor; falling = respawn)
     for (int i=0;i<30;i++){
@@ -1089,14 +1089,13 @@ static void BuildSkyhaven(void){
     };
     for (int i=0;i<13;i++) addSkyPlat(route[i].x, route[i].z, route[i].top, route[i].r);
 
-    // ---- one updraft per gap: each column only reaches the next terrace, so a
-    //      missed column drops you into the blue. They stiffen as you climb.
+    // ---- one updraft per gap: SHORT, gentle columns. Each only carries you to
+    //      the next terrace and then tops out - you cannot ride a single column
+    //      high enough to skip the level, so every gap must be caught in turn.
     for (int i=0;i<12;i++){
         float mx = (route[i].x + route[i+1].x)*0.5f;
         float mz = (route[i].z + route[i+1].z)*0.5f;
-        float bY = route[i].top - 1.0f;
-        float h  = (route[i+1].top - route[i].top) + 12.0f;
-        addUpdraft({mx, bY, mz}, 5.0f, h, 24.0f + i*0.4f);
+        addUpdraft({mx, route[i].top - 2.0f, mz}, 5.0f, 12.0f, 16.0f);
     }
 
     // ---- only TWO bail platforms on the whole ascent (far fewer nets) -------
@@ -1127,7 +1126,7 @@ static void BuildSkyhaven(void){
         addDecor(D_CUBE, {52+cosf(b*1.571f)*4.6f, 74, sinf(b*1.571f)*4.6f}, {1.1f,146,1.1f},
                  (Color){214,224,240,255}, TX_SKY);
     addSkyPlat(52, 0, 149.0f, 5.4f);                     // the crown terrace (walk to the star)
-    addUpdraft({47, 100.0f, 4}, 7.0f, 52.0f, 30.0f);     // the mill's great gust -> the crown
+    addUpdraft({47, 130.0f, 4}, 7.0f, 24.0f, 18.0f);     // the mill's final gust (P12 -> the crown)
     addWindmill({52, 140, 0}, 24.0f, 0.0f, 14.0f, 4, (Color){236,74,84,255});   // the great blades
     addStreamer({52, 148, 0}, 6.0f, 0.7f, C_GOLD);       // pennant at the very top
 

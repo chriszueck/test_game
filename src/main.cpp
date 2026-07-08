@@ -877,7 +877,7 @@ static void DemoMode(void){
     float T = 0, maxY = 0;
     int rf = 0; bool shotA = false, shotB = false, webPhase = false;
     bool boostPhase = false, slamPhase = false, edgePhase = false, sailPhase = false;
-    while (T < 18.4f && !WindowShouldClose()){
+    while (T < 22.5f && !WindowShouldClose()){
         gBotFwd  = (T > 0.4f && T < 2.2f) || (T > 3.4f && T < 4.0f) || (T > 8.1f && T < 9.05f);
         gBotHold = (T > 1.05f && T < 2.2f) || (T > 3.5f && T < 5.0f)   // vault #1, then over-hold -> FOUL
                 || (T > 8.2f && T < 9.15f);                            // boosted PERFECT vault
@@ -902,12 +902,16 @@ static void DemoMode(void){
             edgePhase = true;
             pl.pos = {-23.6f, 42.0f, 50}; pl.vel = {0,0,0}; pl.yaw = 0;   // 2.4 off the -26 center
         }
-        if (!sailPhase && T > 15.4f){    // phase 7: SKYHAVEN sail + updraft (drop into a column)
+        if (!sailPhase && T > 15.4f){    // phase 7: SKYHAVEN anti-cheat test - ride U0 as high as it goes
             sailPhase = true;
             BuildWorld(4); gUnlockSail = true;
             pl = Player(); pl.pos = {-57, 7.0f, 8}; pl.vel = {0,-4,0}; pl.yaw = 1.4f;  // over updraft U0 (gap P0->P1)
         }
-        gBotSail = (T > 15.45f && T < 17.6f);    // hold the sail: should RISE in the column, then glide
+        gBotSail = (T > 15.45f && T < 22.0f);    // hold the sail the WHOLE time (cheat attempt)
+        if (T > 15.45f && T < 22.0f){            // pin to U0's axis: a player perfectly fighting the wind.
+            pl.pos.x = -57.0f; pl.pos.z = 8.0f;  // harness-only - proves the column's height CAP (~P1, not the moon)
+            pl.vel.x = 0; pl.vel.z = 0;
+        }
         PlayerUpdate(dt, false);
         maxY = fmaxf(maxY, pl.pos.y);
         T += dt;
