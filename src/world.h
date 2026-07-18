@@ -43,25 +43,41 @@ static const Color C_GOLD    = { 253, 192,  40, 255 };
 static const Color C_ROOF    = { 222,  60,  48, 255 };
 
 // ------------------------------------------------------------- builders ----
+// LEVEL EDITOR groups: every primitive gets a group id. A composite builder
+// (addShroom, addPipe, ...) opens a GrpScope so all its parts share one id and
+// the editor can pick/move/scale/delete the whole thing as a unit. A bare
+// primitive call at depth 0 gets its own fresh id.
+static int gGrp = 0;             // last issued group id
+static int gGrpDepth = 0;        // >0 while inside a composite builder
+static int grpUse(void){ if (gGrpDepth == 0) gGrp++; return gGrp; }
+struct GrpScope {
+    GrpScope(){ if (gGrpDepth++ == 0) gGrp++; }
+    ~GrpScope(){ gGrpDepth--; }
+};
+
 static Solid* addBox(Vector3 mn, Vector3 mx, int surf, bool bouncy=false, bool vis=true){
     Solid s{}; s.isCyl=false; s.mn=mn; s.mx=mx; s.surf=surf; s.bouncy=bouncy; s.visible=vis;
+    s.grp=grpUse();
     solids.push_back(s); return &solids.back();
 }
 static Solid* addCyl(Vector3 base, float rad, float hgt, int surf, bool bouncy=false, bool vis=true){
     Solid s{}; s.isCyl=true; s.base=base; s.rad=rad; s.hgt=hgt;
     s.mn={base.x-rad, base.y, base.z-rad}; s.mx={base.x+rad, base.y+hgt, base.z+rad};
     s.surf=surf; s.bouncy=bouncy; s.visible=vis;
+    s.grp=grpUse();
     solids.push_back(s); return &solids.back();
 }
 static void addDecor(int kind, Vector3 pos, Vector3 scale, Color col, int tex=TX_WHITE, float rotY=0){
-    decor.push_back({kind, pos, scale, col, tex, rotY});
+    decor.push_back({kind, pos, scale, col, tex, rotY, grpUse()});
 }
-static void addWebAnchor(Vector3 pos, float radius=3.0f){ gWebAnchors.push_back({pos, radius, 0}); }
+static void addWebAnchor(Vector3 pos, float radius=3.0f){ gWebAnchors.push_back({pos, radius, 0, grpUse()}); }
 
 // mushroom cap only: collision cylinder + toadstool silhouette
 // (overhanging rim lip + domed crown + pale gilled underside + spots)
 static void addCap(float x, float z, float capTopY, float capR, bool red){
-    float capH = clampf(capR*0.70f, 1.3f, 3.0f);
+    GrpScope _g;
+    // wide clamps: big caps read chunky, small caps read dainty
+    float capH = clampf(capR*0.70f, 0.9f, 3.8f);
     addCyl({x, capTopY - capH, z}, capR*0.96f, capH, red ? S_SHROOM_RED : S_SHROOM_TAN, red, false);
     Color cc = red ? C_RED : C_TAN;
     float domeTop = capTopY + 0.28f, domeBot = capTopY - capH - 0.15f;
@@ -87,8 +103,9 @@ static void addCap(float x, float z, float capTopY, float capR, bool red){
 }
 // full mushroom: stem + cap
 static void addShroom(Vector3 groundPos, float capTopY, float capR, bool red){
-    float capH   = clampf(capR*0.70f, 1.3f, 3.0f);
-    float stemR  = clampf(capR*0.40f, 0.6f, 1.7f);
+    GrpScope _g;
+    float capH   = clampf(capR*0.70f, 0.9f, 3.8f);
+    float stemR  = clampf(capR*0.40f, 0.4f, 2.4f);
     float stemH  = capTopY - groundPos.y - capH*0.60f;
     addCyl(groundPos, stemR, stemH + 0.2f, S_DARK, false, false);                  // stem collision
     // stem: fat base flare, fibrous shaft, collar bulge under the cap
@@ -98,7 +115,36 @@ static void addShroom(Vector3 groundPos, float capTopY, float capR, bool red){
              {stemR*1.35f, 0.55f, stemR*1.35f}, (Color){246,233,203,255});
     addCap(groundPos.x, groundPos.z, capTopY, capR, red);
 }
+// tiny decorative button mushroom - pure decor, no collision, so patches of
+// them can freckle the meadows without tripping the player
+static void addMiniShroom(float x, float y, float z, float capR, bool red){
+    GrpScope _g;
+    float stemH = capR*frnd(1.1f, 1.9f);
+    Color cc = red ? C_RED : C_TAN;
+    addDecor(D_CYL, {x, y, z}, {capR*0.30f, stemH, capR*0.30f}, C_CREAM, TX_FIBER);
+    addDecor(D_SPHERE, {x, y + stemH + capR*0.10f, z}, {capR, capR*0.62f, capR}, cc, TX_STREAK);
+    addDecor(D_SPHERE, {x, y + stemH - 0.02f, z}, {capR*0.72f, capR*0.16f, capR*0.72f},
+             (Color){250,242,222,255});
+    int nd = (capR > 0.55f)? 3 : 2;
+    for (int i=0;i<nd;i++){
+        float a = i*(6.283f/nd) + x + z;                    // deterministic-ish scatter
+        float rr = capR*frnd(0.25f, 0.55f);
+        addDecor(D_SPHERE, {x+cosf(a)*rr, y + stemH + capR*0.52f, z+sinf(a)*rr},
+                 {capR*0.22f, capR*0.10f, capR*0.22f}, C_CREAM);
+    }
+}
+// a family of button shrooms huddled together - sizes vary wildly on purpose
+static void addShroomPatch(float x, float y, float z, int n, float spread){
+    GrpScope _g;
+    for (int i=0;i<n;i++){
+        float a = i*2.4f + x*0.7f;                          // golden-angle scatter
+        float d = spread*(0.25f + 0.75f*((i+1)/(float)n));
+        addMiniShroom(x + cosf(a)*d, y, z + sinf(a)*d,
+                      frnd(0.30f, 1.15f), (i%3)==1);
+    }
+}
 static void addPipe(Vector3 groundPos, float rad, float hgt){
+    GrpScope _g;
     addCyl(groundPos, rad, hgt-0.7f, S_PIPE);
     addCyl({groundPos.x, groundPos.y+hgt-0.7f, groundPos.z}, rad+0.28f, 0.7f, S_PIPE); // lip
     addDecor(D_CYL, {groundPos.x, groundPos.y+hgt-0.06f, groundPos.z},
@@ -109,31 +155,36 @@ static void addQBlock(Vector3 topCenter, float s=2.2f){
            {topCenter.x+s/2, topCenter.y,   topCenter.z+s/2}, S_QBLOCK);
 }
 static void addTowerRoof(Vector3 topCenter, float rad){
+    GrpScope _g;
     addDecor(D_CYL,  {topCenter.x, topCenter.y-0.1f, topCenter.z}, {rad+0.5f, 0.5f, rad+0.5f}, C_STONE_B, TX_STONE);
     addDecor(D_CONE, {topCenter.x, topCenter.y+0.4f, topCenter.z}, {rad+0.7f, rad*1.5f, rad+0.7f}, C_ROOF);
     addDecor(D_SPHERE, {topCenter.x, topCenter.y+0.4f+rad*1.5f, topCenter.z}, {0.35f,0.35f,0.35f}, C_GOLD);
 }
 // route flag: pole + pennant (pure decor - marks where a path starts)
 static void addFlag(Vector3 groundPos, Color col){
+    GrpScope _g;
     addDecor(D_CYL,   groundPos, {0.08f, 3.0f, 0.08f}, C_WOOD);
     addDecor(D_CUBE,  {groundPos.x+0.5f, groundPos.y+2.62f, groundPos.z}, {0.9f, 0.45f, 0.06f}, col);
     addDecor(D_SPHERE,{groundPos.x, groundPos.y+3.08f, groundPos.z}, {0.14f,0.14f,0.14f}, C_GOLD);
 }
 // spinning collectible coins trace the routes (drawn + collected in main.cpp)
-struct Coin { Vector3 p; bool taken; };
+struct Coin { Vector3 p; bool taken; int grp; };
 static std::vector<Coin> gCoins;
-static void addCoin(float x, float y, float z){ gCoins.push_back({{x,y,z}, false}); }
+static void addCoin(float x, float y, float z){ gCoins.push_back({{x,y,z}, false, grpUse()}); }
 // hanging pennant banner on a wall face (face normal along -Z; rotY to reorient)
 static void addBanner(Vector3 topCenter, Color col, float w=1.5f, float h=2.6f){
+    GrpScope _g;
     addDecor(D_CUBE, {topCenter.x, topCenter.y-h*0.5f, topCenter.z}, {w, h, 0.14f}, col);
     addDecor(D_CUBE, {topCenter.x, topCenter.y+0.06f, topCenter.z}, {w+0.25f, 0.22f, 0.2f}, C_GOLD);
 }
 static void addTorch(Vector3 groundPos){
+    GrpScope _g;
     addDecor(D_CYL,    groundPos, {0.09f, 2.7f, 0.09f}, C_WOOD);
     addDecor(D_SPHERE, {groundPos.x, groundPos.y+2.95f, groundPos.z}, {0.30f,0.42f,0.30f}, {255,140,30,255});
     addDecor(D_SPHERE, {groundPos.x, groundPos.y+3.06f, groundPos.z}, {0.16f,0.24f,0.16f}, {255,225,95,255});
 }
 static void addIvy(Vector3 base, float faceZ, int n){
+    GrpScope _g;
     for (int i=0;i<n;i++)
         addDecor(D_SPHERE, {base.x+frnd(-1.4f,1.4f), base.y+frnd(0.3f,5.5f), faceZ},
                  {frnd(0.5f,1.0f), frnd(0.5f,0.9f), 0.35f}, {56,150,60,255});
@@ -142,9 +193,12 @@ static void addIvy(Vector3 base, float faceZ, int n){
 // ------------------------------------------------------------ levels ------
 static int     gLevel   = 0;            // 0 = castle, 1 = megashroom tower
 static Vector3 gWarpTop = {0,0,0};      // stand here to switch levels
+static int     gWarpGrp = -1;           // the warp pipe's group: moving it moves gWarpTop
 
 // warp pipe: a fat green pipe + flag; standing on its lip cycles to the next level
 static void addWarpPipe(Vector3 groundPos, Color flagCol){
+    GrpScope _g;
+    gWarpGrp = gGrp;
     addPipe(groundPos, 2.0f, 2.6f);
     gWarpTop = { groundPos.x, groundPos.y + 2.6f, groundPos.z };
     addFlag({groundPos.x + 2.9f, groundPos.y, groundPos.z}, flagCol);
@@ -152,34 +206,38 @@ static void addWarpPipe(Vector3 groundPos, Color flagCol){
              {0.30f,0.30f,0.30f}, C_GOLD);         // beacon ball over the mouth
 }
 static void addSpore(float x, float y, float z){
-    gSpores.push_back({{x,y,z}, 0});
+    GrpScope _g;
+    gSpores.push_back({{x,y,z}, 0, gGrp});
     addDecor(D_CYL, {x, y-1.1f, z}, {0.09f, 1.0f, 0.09f}, {96,180,84,255});   // stem (orb drawn live)
 }
 // power shrine: touch it and a new mechanic is yours (orb drawn live)
 static void addShrine(Vector3 groundPos, int type){
-    gShrines.push_back({{groundPos.x, groundPos.y + 1.7f, groundPos.z}, type});
+    GrpScope _g;
+    gShrines.push_back({{groundPos.x, groundPos.y + 1.7f, groundPos.z}, type, gGrp});
     addCyl(groundPos, 1.2f, 0.9f, S_STONE);
     addDecor(D_CYL, {groundPos.x, groundPos.y + 0.88f, groundPos.z}, {1.35f,0.14f,1.35f}, C_GOLD);
     addDecor(D_CYL, {groundPos.x, groundPos.y - 0.02f, groundPos.z}, {1.6f,0.1f,1.6f}, C_STONE_B, TX_STONE);
 }
-static void addMote(Vector3 p, Color c, float r, float spd){ gMotes.push_back({p, c, r, spd}); }
+static void addMote(Vector3 p, Color c, float r, float spd){ gMotes.push_back({p, c, r, spd, grpUse()}); }
 
 // ---- SKYHAVEN builders ----------------------------------------------------
 static void addUpdraft(Vector3 base, float rad, float hgt, float str=32.0f){
-    gUpdrafts.push_back({base, rad, hgt, str});
+    gUpdrafts.push_back({base, rad, hgt, str, grpUse()});
 }
 static void addWindmill(Vector3 pos, float rad, float tilt, float spd, int blades, Color col, int hazard=0){
-    gWindmills.push_back({pos, rad, tilt, spd, blades, col, hazard});
+    gWindmills.push_back({pos, rad, tilt, spd, blades, col, hazard, grpUse()});
 }
 static void addStreamer(Vector3 top, float len, float w, Color col){
-    gBanners.push_back({top, len, w, col, frnd(0,6.283f)});
+    gBanners.push_back({top, len, w, col, frnd(0,6.283f), grpUse()});
 }
 static void addPinwheel(Vector3 pos, float rad, float spd, Color a, Color b){
+    GrpScope _g;
     addDecor(D_CYL, {pos.x, pos.y-1.3f, pos.z}, {0.07f, 1.3f, 0.07f}, C_WOOD);   // pole
-    gPinwheels.push_back({pos, rad, spd, a, b});
+    gPinwheels.push_back({pos, rad, spd, a, b, gGrp});
 }
 // a floating sky-stone platform (walkable disc + tapered underside + rim)
 static void addSkyPlat(float x, float z, float top, float r){
+    GrpScope _g;
     addCyl({x, top-1.6f, z}, r, 1.6f, S_SKYSTONE);
     addDecor(D_CYL, {x, top-0.28f, z}, {r+0.18f, 0.4f, r+0.18f}, (Color){236,242,252,255}, TX_SKY);
     addDecor(D_CONE, {x, top-4.6f, z}, {r*0.9f, 3.2f, r*0.9f}, (Color){206,216,234,255}, TX_SKY);   // underside
@@ -225,13 +283,15 @@ static void BuildCastle(void){
     addFlag({ 4.0f,0,35.0f}, C_RED);               // red    : watchtower skip (expert)
 
     // ---- zone 1 / WEST LADDER: shroom -> pipe -> two tall tans -> wall ------
-    addShroom({  7,0, 20},  4.0f, 3.4f, false);    // tan A
+    // sizes taper as the ladder climbs: fat welcoming first cap, tight crux
+    addShroom({  7,0, 20},  4.8f, 3.9f, false);    // tan A - big and friendly (tall enough to walk under)
     addPipe  ({  0,0, 29},  2.4f, 7.0f);           // mid pipe
-    addShroom({ -8,0, 40}, 11.5f, 3.2f, false);    // tan B (the sprint-vault crux)
-    addShroom({-14,0, 51}, 13.5f, 3.2f, false);    // tan C
-    addShroom({-10,0, 62}, 15.5f, 3.2f, false);    // tan D -> wall top (16)
-    addShroom({-26,0, 50},  5.0f, 3.4f, true);     // red bail west
-    addShroom({ -2,0, 64},  4.5f, 3.0f, true);     // red bail near wall
+    addShroom({ -8,0, 40}, 11.5f, 2.8f, false);    // tan B (the sprint-vault crux - small)
+    addShroom({-14,0, 51}, 13.5f, 3.4f, false);    // tan C - a breather
+    addShroom({-10,0, 62}, 15.5f, 2.9f, false);    // tan D -> wall top (16)
+    addShroom({-26,0, 50},  5.0f, 4.5f, true);     // red bail west - a fat parachute
+    addShroom({ -2,0, 64},  4.5f, 2.4f, true);     // red bail near wall - small button
+    addShroomPatch(3, 0, 22, 5, 2.6f);             // button family by tan A
 
     // ---- zone 1 / EAST PIPE YARD: five pipes, small pads, rising ------------
     addPipe({18,0,26}, 2.4f,  4.5f);
@@ -239,13 +299,13 @@ static void BuildCastle(void){
     addPipe({19,0,43}, 2.4f, 11.5f);
     addPipe({25,0,52}, 2.4f, 14.0f);
     addPipe({20,0,62}, 2.7f, 15.5f);               // fat final pipe -> wall top
-    addShroom({28,0,44}, 5.0f, 3.4f, true);        // red bail east
+    addShroom({28,0,44}, 5.0f, 3.9f, true);        // red bail east
 
     // ---- zone 1 / CENTER WATCHTOWER: two PERFECT run-vaults skip the lot ----
     addBox({2.5f,0,57.0f},{6.0f,8.0f,60.5f}, S_BRICK);
     addDecor(D_CUBE,  {4.25f,4.8f,56.9f}, {1.2f,1.8f,0.25f}, {40,34,30,255});  // window
     addDecor(D_SPHERE,{2.9f,8.32f,57.4f}, {0.28f,0.28f,0.28f}, C_GOLD);        // finial
-    addShroom({11,0,52}, 4.0f, 3.0f, true);        // red bail center
+    addShroom({11,0,52}, 4.0f, 2.6f, true);        // red bail center - small
 
     // bonus meadow ?-blocks (side hops for coins-and-grins energy)
     addQBlock({-30, 7, 24}, 2.6f);
@@ -260,11 +320,17 @@ static void BuildCastle(void){
     addCoin( 25, 15.3f, 52); addCoin(20, 16.8f, 62);
     addCoin(4.25f, 9.3f, 58.8f); addCoin(4, 13.5f, 63.5f); addCoin(4, 15.5f, 67);
 
-    // decorative meadow shrooms (non-path flavor, far from routes)
-    addShroom({ 45,0, 55}, 7.0f, 4.2f, false);
-    addShroom({-55,0, 30}, 8.0f, 4.6f, false);
-    addShroom({-70,0, 75}, 6.0f, 4.0f, true);
-    addShroom({ 70,0, 90}, 9.0f, 5.0f, false);
+    // decorative meadow shrooms (non-path flavor, far from routes) - a real
+    // spread now: towering landmarks down to knee-high buttons
+    addShroom({ 45,0, 55},  9.0f, 5.5f, false);
+    addShroom({-55,0, 30},  5.0f, 2.6f, false);
+    addShroom({-70,0, 75}, 11.0f, 6.4f, true);     // giant red sentinel
+    addShroom({ 70,0, 90}, 14.0f, 7.8f, false);    // the meadow colossus
+    addShroom({ 52,0, 48},  2.6f, 1.5f, false);    // its little companion
+    addShroom({-60,0, 36},  3.2f, 1.8f, true);
+    addShroomPatch(-48, 0,  22, 6, 3.2f);          // button families in the grass
+    addShroomPatch( 62, 0,  84, 7, 3.8f);
+    addShroomPatch(-14, 0, -16, 5, 2.8f);          // right by spawn: scale is set early
 
     // flowers + bushes
     for (int i=0;i<70;i++){
@@ -341,9 +407,10 @@ static void BuildCastle(void){
     addCoin(3, 26.3f, 80); addCoin(-2, 28.8f, 88); addCoin(3, 31.8f, 97); addCoin(-1, 34.3f, 106);
 
     // ---- zone 2 / ROUTE B: giant shroom stack -> east keep beams ------------
-    addShroom({22,0, 86}, 21.0f, 4.2f, false);                    // G1 (vault on from wall top)
-    addShroom({26,0,100}, 26.0f, 4.2f, false);                    // G2
-    addShroom({19,0,112}, 31.0f, 4.0f, false);                    // G3
+    // the stack shrinks as it rises: broad base, nervy top
+    addShroom({22,0, 86}, 21.0f, 5.4f, false);                    // G1 (vault on from wall top)
+    addShroom({26,0,100}, 26.0f, 4.0f, false);                    // G2
+    addShroom({19,0,112}, 31.0f, 3.1f, false);                    // G3 - the tight one
     addBox({18,35.2f,120.6f},{20.8f,35.7f,123.6f}, S_WOOD);       // beams bolted to keep's east face
     addBox({18,39.7f,129.6f},{20.8f,40.2f,132.6f}, S_WOOD);
     addBox({18,44.0f,138.6f},{20.8f,44.5f,141.6f}, S_WOOD);       // -> keep roof 46
@@ -356,11 +423,12 @@ static void BuildCastle(void){
     addBox({-0.2f,30.7f,104.8f},{ 4.2f,31.0f,109.2f}, S_BRICK);   // -> first balcony
     addCoin(14, 22.3f, 86); addCoin(8, 27.3f, 97); addCoin(2, 32.3f, 107);
 
-    // courtyard red bails + flavor + fountain
-    addShroom({-10,0, 85}, 5.0f, 3.4f, true);
-    addShroom({  4,0, 95}, 5.0f, 3.4f, true);
-    addShroom({ -2,0,108}, 5.0f, 3.4f, true);
-    addShroom({-20,0,120}, 6.0f, 3.6f, false);
+    // courtyard red bails + flavor + fountain (bails vary: fat, button, mid)
+    addShroom({-10,0, 85}, 5.0f, 4.3f, true);
+    addShroom({  4,0, 95}, 4.2f, 2.5f, true);
+    addShroom({ -2,0,108}, 5.5f, 3.6f, true);
+    addShroom({-20,0,120}, 7.5f, 5.6f, false);     // big courtyard shade-cap
+    addShroomPatch(-24, 0, 128, 5, 2.6f);
     addCyl({-15,0,98}, 2.6f, 0.9f, S_STONE);                      // fountain rim (vaultable)
     addDecor(D_CYL, {-15,0.04f,98}, {2.25f,0.84f,2.25f}, {96,192,240,255});   // water
     addCyl({-15,0.9f,98}, 0.35f, 1.3f, S_STONE);                  // center column
@@ -545,9 +613,11 @@ static void BuildMegashroom(void){
     {
         float fx[9] = {-62, -84, -48,  58,  80,  66, -20,  30, -70};
         float fz[9] = { -8,  60, 118, -18,  52, 118, -52, -58, -44};
-        float fh[9] = { 11,  16,  9,  13,  18,  10,  8,  12,  14};
-        float fr[9] = {5.2f,6.8f,4.6f,5.8f,7.4f,4.4f,4.0f,5.4f,6.2f};
+        float fh[9] = { 11,  22,  6,  13,  26,  10,  4,  16,  14};
+        float fr[9] = {5.2f,9.4f,3.2f,5.8f,11.0f,4.4f,2.2f,6.6f,7.6f};
         for (int i=0;i<9;i++) addShroom({fx[i],0,fz[i]}, fh[i], fr[i], (i%3)==1);
+        addShroomPatch(-56, 0,  -2, 5, 3.4f);      // undergrowth at the giants' feet
+        addShroomPatch( 72, 0,  46, 6, 4.0f);
     }
     // drifting cloud banks at three heights
     for (int k=0;k<6;k++){
@@ -580,47 +650,49 @@ static void BuildMegashroom(void){
     // stalk (you never have to curve around it in the air). Difficulty comes
     // from small pads, tall/varied rises, a PERFECT gate, the web crossing,
     // and the long fall a miss earns - not from impossible geometry.
+    // radii breathe now: broad resting shelves, tight nervy pads, fat reds -
+    // the climb reads as a rhythm of big and small instead of a uniform stair
     struct ShelfDef { float ang, top, r; int red; float dist; };
     static const ShelfDef S[] = {
         // ---- Part A: the ground up to the Weaver's shelf (13 jumps, 68° each) ----
-        {356,   5.0f, 2.8f, 0, 0},                              // 1  up from the ground
-        { 64,   9.4f, 2.4f, 0, 0},                              // 2  +4.4
-        {132,  15.8f, 2.3f, 0, 0},                              // 3  +6.4 F
-        {190,  12.5f, 2.9f, 1, 0},                              //    red
-        {200,  18.4f, 2.3f, 0, 0},                              // 4  +2.6 S
-        {268,  24.8f, 2.2f, 0, 0},                              // 5  +6.4 F
-        {336,  29.1f, 2.2f, 0, 0},                              // 6  +4.3 M
-        { 20,  26.0f, 2.9f, 1, 0},                              //    red
-        { 44,  35.5f, 2.2f, 0, 0},                              // 7  +6.4 F
-        {112,  38.1f, 2.2f, 0, 0},                              // 8  +2.6 S
-        {180,  44.5f, 2.1f, 0, 0},                              // 9  +6.4 F
-        {210,  41.0f, 2.9f, 1, 0},                              //    red
-        {248,  48.8f, 2.1f, 0, 0},                              // 10 +4.3 M
-        {316,  55.2f, 2.1f, 0, 0},                              // 11 +6.4 F
-        { 60,  51.0f, 2.9f, 1, 0},                              //    red
-        { 24,  57.8f, 2.1f, 0, 0},                              // 12 +2.6 S
-        { 92,  62.1f, 2.3f, 0, 0},                              // 13 +4.3 M
-        {160,  68.6f, 2.6f, 0, 0},                              // 14 THE WEAVER'S SHELF (shrine wakes here)
+        {356,   5.0f, 3.4f, 0, 0},                              // 1  up from the ground - generous
+        { 64,   9.4f, 2.6f, 0, 0},                              // 2  +4.4
+        {132,  15.8f, 2.1f, 0, 0},                              // 3  +6.4 F - tight
+        {190,  12.5f, 3.3f, 1, 0},                              //    red - fat parachute
+        {200,  18.4f, 2.9f, 0, 0},                              // 4  +2.6 S - breather
+        {268,  24.8f, 2.0f, 0, 0},                              // 5  +6.4 F - tight
+        {336,  29.1f, 2.5f, 0, 0},                              // 6  +4.3 M
+        { 20,  26.0f, 2.7f, 1, 0},                              //    red
+        { 44,  35.5f, 2.1f, 0, 0},                              // 7  +6.4 F
+        {112,  38.1f, 3.0f, 0, 0},                              // 8  +2.6 S - broad rest
+        {180,  44.5f, 1.9f, 0, 0},                              // 9  +6.4 F - the pinch
+        {210,  41.0f, 3.2f, 1, 0},                              //    red
+        {248,  48.8f, 2.4f, 0, 0},                              // 10 +4.3 M
+        {316,  55.2f, 2.0f, 0, 0},                              // 11 +6.4 F
+        { 60,  51.0f, 2.6f, 1, 0},                              //    red
+        { 24,  57.8f, 2.8f, 0, 0},                              // 12 +2.6 S
+        { 92,  62.1f, 2.2f, 0, 0},                              // 13 +4.3 M
+        {160,  68.6f, 3.2f, 0, 0},                              // 14 THE WEAVER'S SHELF - a big landmark
         // ---- the web crossing (shrine unlocks the swing; two blooms are the
         //      only road on - swinging can steer where a vault cannot) ----
         {160,  77.1f, 2.4f, 0, 17.0f},                          // web gap I - a pad flung far off the stalk
         {240,  86.0f, 2.3f, 0, 0},                              // web gap II - swing home, higher
         // ---- Part B: above the web up to the crown (same 68° spiral) ----
-        {308,  92.4f, 2.0f, 0, 0},                              // 16 +6.4 F
-        {340,  89.0f, 2.8f, 1, 0},                              //    red by the web exit
-        { 16,  95.0f, 2.0f, 0, 0},                              // 17 +2.6 S
-        { 84, 101.4f, 2.0f, 0, 0},                              // 18 +6.4 F
-        {152, 105.7f, 2.0f, 0, 0},                              // 19 +4.3 M
-        {120,  98.0f, 2.8f, 1, 0},                              //    red
-        {220, 112.1f, 2.0f, 0, 0},                              // 20 +6.4 F
-        {288, 120.7f, 2.2f, 0, 0},                              // 21 THE PERFECT GATE (+8.6, sprint+PERFECT)
-        {250, 108.0f, 2.8f, 1, 0},                              //    red to catch a botched PERFECT
-        {356, 123.3f, 2.0f, 0, 0},                              // 22 +2.6 S
-        { 64, 129.7f, 2.0f, 0, 0},                              // 23 +6.4 F
-        { 30, 119.0f, 2.8f, 1, 0},                              //    red
-        {132, 132.3f, 2.0f, 0, 0},                              // 24 +2.6 S
-        {200, 138.7f, 2.0f, 0, 0},                              // 25 +6.4 F
-        {170, 129.0f, 2.8f, 1, 0},                              //    the last red - the crown run is dry
+        {308,  92.4f, 2.2f, 0, 0},                              // 16 +6.4 F
+        {340,  89.0f, 3.0f, 1, 0},                              //    red by the web exit
+        { 16,  95.0f, 1.9f, 0, 0},                              // 17 +2.6 S - button
+        { 84, 101.4f, 2.5f, 0, 0},                              // 18 +6.4 F
+        {152, 105.7f, 1.9f, 0, 0},                              // 19 +4.3 M
+        {120,  98.0f, 2.7f, 1, 0},                              //    red
+        {220, 112.1f, 2.3f, 0, 0},                              // 20 +6.4 F
+        {288, 120.7f, 2.6f, 0, 0},                              // 21 THE PERFECT GATE (+8.6, sprint+PERFECT)
+        {250, 108.0f, 3.1f, 1, 0},                              //    red to catch a botched PERFECT
+        {356, 123.3f, 1.9f, 0, 0},                              // 22 +2.6 S
+        { 64, 129.7f, 2.4f, 0, 0},                              // 23 +6.4 F
+        { 30, 119.0f, 2.6f, 1, 0},                              //    red
+        {132, 132.3f, 1.9f, 0, 0},                              // 24 +2.6 S - the last pinch
+        {200, 138.7f, 2.1f, 0, 0},                              // 25 +6.4 F
+        {170, 129.0f, 3.3f, 1, 0},                              //    the last red - fat, the crown run is dry
         {268, 141.5f, 2.4f, 0, 6.0f},                           // 26 +2.8 - swings OUT past the crown rim
         {320, 144.5f, 2.4f, 0, 6.6f},                           // 27 outrigger just under the rim: hop up & in
     };
@@ -649,10 +721,16 @@ static void BuildMegashroom(void){
     }
     addCoin(CX, 149.4f, CZ);
 
-    // base parachutes: four giant reds ringing the stalk catch long falls
-    for (int k=0;k<4;k++){
-        float a = (45 + k*90)*DEG2RAD;
-        addShroom({CX+sinf(a)*12.0f, 0, CZ+cosf(a)*12.0f}, 5.0f, 3.6f, true);
+    // base parachutes: four reds ringing the stalk catch long falls -
+    // different heights AND sizes, a proper mushroom family around the roots
+    {
+        float pr[4] = {4.8f, 3.2f, 5.6f, 2.8f};
+        float ph[4] = {5.0f, 7.0f, 4.2f, 6.2f};
+        for (int k=0;k<4;k++){
+            float a = (45 + k*90)*DEG2RAD;
+            addShroom({CX+sinf(a)*12.0f, 0, CZ+cosf(a)*12.0f}, ph[k], pr[k], true);
+        }
+        addShroomPatch(CX+9, 0, CZ-10, 6, 3.0f);   // buttons among the giants
     }
 
     // THE WEAVER'S BLOOM: it wakes on the shelf right below the web gaps -
@@ -682,9 +760,9 @@ static void BuildMegashroom(void){
         addDecor(D_CYL,   {x,0,z},     {0.06f,0.55f,0.06f}, {60,150,50,255});
         addDecor(D_SPHERE,{x,0.62f,z}, {0.2f,0.2f,0.2f},  heads[GetRandomValue(0,3)]);
     }
-    addShroom({-45,0, 20}, 7.0f, 4.2f, false);
-    addShroom({ 48,0, 70}, 8.0f, 4.6f, false);
-    addShroom({-38,0, 90}, 6.0f, 4.0f, true);
+    addShroom({-45,0, 20}, 10.0f, 6.0f, false);
+    addShroom({ 48,0, 70},  4.5f, 2.4f, false);
+    addShroom({-38,0, 90},  8.0f, 5.2f, true);
     for (int i=0;i<9;i++){
         float ang = -0.6f + i*0.35f;
         float d = frnd(300,380);
@@ -707,6 +785,7 @@ static void BuildSporeway(void){
 
     // floating island: grass disc + dirt belly + lip
     auto island = [&](float x, float z, float top, float r){
+        GrpScope _g;
         addCyl({x, top-2.2f, z}, r, 2.2f, S_GRASS);
         addDecor(D_SPHERE, {x, top-2.5f, z}, {r*0.94f, 2.8f, r*0.94f}, (Color){124,88,52,255});
         addDecor(D_SPHERE, {x, top-4.4f, z}, {r*0.45f, 1.6f, r*0.45f}, (Color){104,72,42,255});
@@ -721,10 +800,10 @@ static void BuildSporeway(void){
     island(-77, 40,  6.0f, 4.5f);                  // I0
     island(-55, 40, 10.0f, 4.0f);                  // I1
     island(-32, 44, 15.0f, 3.6f);                  // I2
-    addCap(-70, 40,  4.0f, 4.0f, true);            // gap I0->I1: two red trampolines
-    addCap(-62, 41,  4.0f, 4.0f, true);
-    addCap(-47, 42,  5.0f, 4.0f, true);            // gap I1->I2: two more
-    addCap(-40, 43,  5.0f, 4.0f, true);
+    addCap(-70, 40,  4.0f, 4.8f, true);            // gap I0->I1: fat teaching trampoline
+    addCap(-62, 41,  4.0f, 3.6f, true);            //   ...then a tighter one
+    addCap(-47, 42,  5.0f, 4.2f, true);            // gap I1->I2: two more, tightening
+    addCap(-40, 43,  5.0f, 3.0f, true);            //   the small exit cap
     addCoin(-66, 8.0f, 40); addCoin(-44, 9.0f, 42);   // prizes on the bounce line
     // ---- section B: NOW the blooms - two swings, one flight ----------------
     addWebAnchor({-21, 26.0f, 45});
@@ -747,8 +826,8 @@ static void BuildSporeway(void){
     addCoin(-14.5f, 26.0f, 44); addCoin(-12, 72.0f, 39);
 
     // a couple more red trampolines under the later web lines (bounce bails)
-    addShroom({  7,0,47}, 6.0f, 3.6f, true);
-    addShroom({-14,0,44}, 7.0f, 4.0f, true);
+    addShroom({  7,0,47}, 6.0f, 4.6f, true);       // the big net
+    addShroom({-14,0,44}, 7.0f, 3.0f, true);       // the small net
 
     // island life: waterfalls spilling into the void, roots, tufted flowers
     {
@@ -818,9 +897,12 @@ static void BuildSporeway(void){
         addDecor(D_CYL,   {x,0,z},     {0.06f,0.55f,0.06f}, {60,150,50,255});
         addDecor(D_SPHERE,{x,0.62f,z}, {0.2f,0.2f,0.2f},  heads[GetRandomValue(0,3)]);
     }
-    addShroom({-70,0, 75}, 7.0f, 4.2f, false);
-    addShroom({ 25,0, 70}, 8.0f, 4.6f, false);
-    addShroom({ 30,0, 12}, 6.0f, 4.0f, false);
+    addShroom({-70,0, 75}, 11.0f, 6.2f, false);    // meadow giant
+    addShroom({ 25,0, 70},  5.5f, 3.0f, false);
+    addShroom({ 30,0, 12}, 13.0f, 7.2f, false);    // the far colossus
+    addShroom({ 36,0, 18},  2.8f, 1.6f, true);     // its red button friend
+    addShroomPatch(-80, 0, 52, 6, 3.4f);
+    addShroomPatch( 20, 0, 64, 5, 2.8f);
     for (int i=0;i<9;i++){
         float ang = -0.6f + i*0.35f;
         float d = frnd(300,380);
@@ -864,6 +946,7 @@ static void BuildGorge(void){
     }
     // helpers ------------------------------------------------------------------
     auto ledge = [&](bool east, float top, float z0, float z1){
+        GrpScope _g;
         float x0 = east? 12.0f : -15.0f, x1 = east? 15.0f : -12.0f;
         addBox({x0, top-0.7f, z0},{x1, top, z1}, S_STONE);
         addTorch({east? 13.2f : -13.2f, top, z0+0.8f});
@@ -873,6 +956,7 @@ static void BuildGorge(void){
         addBox({east? 5.0f : -15.0f, top-0.4f, z0},{east? 15.0f : -5.0f, top, z1}, S_WOOD);
     };
     auto roof = [&](bool openEast, float y, float z0, float z1){  // the arch that bites
+        GrpScope _g;
         addBox({openEast? -15.0f : -9.0f, y, z0},{openEast? 9.0f : 15.0f, y+1.5f, z1}, S_STONE);
         addDecor(D_CUBE, {openEast? -3.0f : 3.0f, y+1.9f, (z0+z1)*0.5f},
                  {(z1-z0)*0.5f, 0.7f, (z1-z0)*0.5f}, C_STONE_B, TX_STONE);
@@ -885,11 +969,12 @@ static void BuildGorge(void){
     addFlag({3,0,-6}, C_RED);
 
     // ---- act 1: the lesson (P1 practice cap -> L1) ---------------------------
-    addShroom({0,0,-2}, 4.5f, 3.4f, true);
+    addShroom({0,0,-2}, 4.5f, 4.2f, true);         // fat and forgiving - it's the lesson
+    addShroomPatch(-8, 0, -8, 5, 2.6f);            // buttons at the canyon mouth
     ledge(false, 10, 2, 24);                        // L1 west + long walk shelf
     // ---- act 2: THE STEPS (four shafts, windows tighten) ---------------------
     board(false, 10, 24, 28);
-    addShroom({0,0,28}, 5.0f, 3.0f, true);          // C1: drop 5, exit +13, open sky
+    addShroom({0,0,28}, 5.0f, 3.3f, true);          // C1: drop 5, exit +13, open sky
     ledge(true, 18, 30, 44);                        // E1
     addCoin(0, 19.5f, 28);
     board(true, 18, 44, 48);
@@ -898,12 +983,12 @@ static void BuildGorge(void){
     ledge(false, 24, 52, 64);                       // E2
     addCoin(0, 26.5f, 48);
     board(false, 24, 64, 68);
-    addShroom({0,0,68}, 7.0f, 2.6f, true);          // C3: drop 17, window 26..31 (PERFECT)
+    addShroom({0,0,68}, 7.0f, 2.4f, true);          // C3: drop 17, window 26..31 (PERFECT, small)
     roof(true, 38, 65, 71);
     ledge(true, 33, 70, 82);                        // E3
     addCoin(0, 35.5f, 68);
     board(true, 33, 86, 90);
-    addShroom({0,0,90}, 20.0f, 2.4f, true);         // C4 giant: drop 13, window 23..27 (mixed)
+    addShroom({0,0,90}, 20.0f, 2.9f, true);         // C4 giant: drop 13, window 23..27 (mixed)
     roof(false, 47, 87, 93);
     ledge(false, 43, 92, 100);                      // E4 = the crossing porch
     addCoin(0, 45.0f, 90);
@@ -914,7 +999,7 @@ static void BuildGorge(void){
     ledge(true, 40, 126, 134);                      // E5
     // ---- act 4: THE ORGAN PIPES (three shafts, alternating gates) ------------
     board(true, 40, 138, 142);
-    addShroom({0,0,142}, 26.0f, 2.6f, true);        // O1: drop 14, window 20..26 (PERFECT-ish)
+    addShroom({0,0,142}, 26.0f, 2.9f, true);        // O1: drop 14, window 20..26 (PERFECT-ish)
     roof(true, 52, 139, 145);
     ledge(true, 46, 146, 154);                      // E6
     addCoin(0, 49.0f, 142);
@@ -924,7 +1009,7 @@ static void BuildGorge(void){
     ledge(false, 58, 162, 170);                     // E7
     addCoin(0, 60.5f, 160);
     board(false, 58, 172, 176);
-    addShroom({0,0,176}, 40.0f, 2.2f, true);        // O3: drop 18, window 22..26 (GOOD only!)
+    addShroom({0,0,176}, 40.0f, 2.1f, true);        // O3: drop 18, window 22..26 (GOOD only!) - the pin
     roof(true, 66, 173, 179);
     ledge(true, 62, 180, 188);                      // E8
     addCoin(0, 64.0f, 176);
@@ -950,6 +1035,7 @@ static void BuildGorge(void){
 
     // ---- scenery: the gorge lives ---------------------------------------------
     auto pine = [&](float x, float y, float z, float s){
+        GrpScope _g;
         addDecor(D_CYL, {x,y,z}, {0.22f*s, 1.1f*s, 0.22f*s}, {110,74,40,255}, TX_FIBER);
         for (int k=0;k<3;k++)
             addDecor(D_CONE, {x, y+(0.8f+k*0.72f)*s, z},
@@ -957,12 +1043,14 @@ static void BuildGorge(void){
                      ctint((Color){52,140,70,255}, 1.0f+k*0.09f));
     };
     auto crystal = [&](float x, float y, float z){
+        GrpScope _g;
         for (int k=0;k<3;k++)
             addDecor(D_CONE, {x+frnd(-0.5f,0.5f), y, z+frnd(-0.5f,0.5f)},
                      {frnd(0.24f,0.4f), frnd(0.9f,1.9f), frnd(0.24f,0.4f)}, {120,225,255,255});
         addDecor(D_SPHERE, {x,y+0.5f,z}, {1.1f,0.7f,1.1f}, (Color){150,235,255,70});
     };
     auto vine = [&](float x, float ytop, float z, float len){
+        GrpScope _g;
         addDecor(D_CYL, {x, ytop-len, z}, {0.06f, len, 0.06f}, {70,150,60,255});
         for (int k=0;k<4;k++)
             addDecor(D_SPHERE, {x+frnd(-0.2f,0.2f), ytop-len*frnd(0.15f,0.95f), z+frnd(-0.2f,0.2f)},
@@ -1161,13 +1249,19 @@ static void BuildSkyhaven(void){
 }
 
 // ------------------------------------------------------------ dispatcher --
-static void BuildWorld(int level = 0){
+// LEVEL EDITOR: if levels/levelN.txt exists (saved from the F4 editor), it
+// REPLACES the code builder for that level. Delete the file to get the code
+// version back. LoadLevelFile lives in level_io.h (same TU).
+static bool LoadLevelFile(int level);
+static void BuildWorld(int level = 0, bool forceCode = false){
     gLevel = level;
     solids.clear(); decor.clear(); gWebAnchors.clear(); gCoins.clear(); gSpores.clear();
     gShrines.clear(); gMotes.clear();              // else they pile up every warp
     gUpdrafts.clear(); gWindmills.clear(); gBanners.clear(); gPinwheels.clear();
     gAirWind = {0,0,0};
+    gGrp = 0; gGrpDepth = 0; gWarpGrp = -1;
     solids.reserve(600); decor.reserve(1400);
+    if (!forceCode && LoadLevelFile(level)) return;
     if      (level == 1) BuildMegashroom();
     else if (level == 2) BuildSporeway();
     else if (level == 3) BuildGorge();

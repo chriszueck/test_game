@@ -7,6 +7,9 @@
 #include "gfx.h"
 #include "audio.h"
 #include "player.h"
+#include "level_io.h"
+#include "tuning.h"
+#include "editor.h"
 #include <string>
 
 // ------------------------------------------------------------ global state -
@@ -572,6 +575,7 @@ static void DrawChargeGauge(void){
 }
 static void DrawHUD(float t){
     int W = GetScreenWidth(), H = GetScreenHeight();
+    if (gEditMode){ DrawEditorHUD(); return; }
     if (gFlyMode){
         // loud, unmistakable: this is a TEST tool, not part of the game
         float p = 0.6f + 0.4f*sinf(t*4.0f);
@@ -724,6 +728,7 @@ static void DrawHUD(float t){
     }
     if (gMuted) drawTextSh("[M] sound off", 16, H-32, 17, (Color){255,255,255,130});
     drawTextSh(TextFormat("%d fps", GetFPS()), W-86, H-32, 17, (Color){255,255,255,140});
+    DrawTuning();                          // mechanic editor panel (F6), on top
 }
 static void DrawPanelBG(int w, int h){
     int W = GetScreenWidth(), H = GetScreenHeight();
@@ -807,10 +812,11 @@ static void RenderAll(Camera3D cam, float t, bool hud){
         DrawGoalBeam(t);
         DrawParts3D();
         DrawStreaks();
-        if (!gFlyMode) DrawBlobShadow(pl.pos);
+        if (gEditMode) DrawEditor3D();          // selection cages + markers
+        if (!gFlyMode && !gEditMode) DrawBlobShadow(pl.pos);
         rlDrawRenderBatchActive();
         glClear(GLX_DEPTH_BUFFER_BIT);          // pole never clips into walls
-        if (!gFlyMode) DrawPoleFP(cam, t);      // no body/pole in the debug fly-cam
+        if (!gFlyMode && !gEditMode) DrawPoleFP(cam, t);   // no body/pole in fly or editor cam
     EndMode3D();
     if (hud) DrawHUD(t);
 }
@@ -904,7 +910,7 @@ static void DemoMode(void){
         }
         if (!sailPhase && T > 15.4f){    // phase 7: SKYHAVEN anti-cheat test - ride U0 as high as it goes
             sailPhase = true;
-            BuildWorld(4); gUnlockSail = true;
+            BuildWorld(4, true); gUnlockSail = true;
             pl = Player(); pl.pos = {-57, 7.0f, 8}; pl.vel = {0,-4,0}; pl.yaw = 1.4f;  // over updraft U0 (gap P0->P1)
         }
         gBotSail = (T > 15.45f && T < 22.0f);    // hold the sail the WHOLE time (cheat attempt)
@@ -1026,12 +1032,101 @@ static void GoToLevel(int lv){
 }
 static void SwitchLevel(void){ GoToLevel((gLevel + 1) % 5); }
 
+// --edcheck: level-file serialization round-trip. For every level: build from
+// code, save, clear, load, save again - the two files must be identical and
+// the entity counts must survive. Also round-trips mechanics.txt (only if the
+// user doesn't already have one). Results land in edcheck_log.txt.
+static bool EdCheck(void){
+    FILE* lf = fopen("edcheck_log.txt", "w");
+    bool allOk = true;
+    char pa[600], pb[600];
+    snprintf(pa, sizeof(pa), "%sedcheck_a.txt", GetApplicationDirectory());
+    snprintf(pb, sizeof(pb), "%sedcheck_b.txt", GetApplicationDirectory());
+    for (int lv=0; lv<5; lv++){
+        BuildWorld(lv, true);
+        int cs=(int)solids.size(), cd=(int)decor.size(), cc=(int)gCoins.size(),
+            cw=(int)gWebAnchors.size(), cu=(int)gUpdrafts.size(), cm=(int)gWindmills.size();
+        SaveLevelFileTo(pa);
+        solids.clear(); decor.clear(); gWebAnchors.clear(); gCoins.clear(); gSpores.clear();
+        gShrines.clear(); gMotes.clear(); gUpdrafts.clear(); gWindmills.clear();
+        gBanners.clear(); gPinwheels.clear();     // wipe, then reload from the file
+        LoadLevelFileFrom(pa);
+        bool cOk = cs==(int)solids.size() && cd==(int)decor.size() && cc==(int)gCoins.size()
+                && cw==(int)gWebAnchors.size() && cu==(int)gUpdrafts.size() && cm==(int)gWindmills.size();
+        SaveLevelFileTo(pb);
+        char* ta = LoadFileText(pa); char* tb = LoadFileText(pb);
+        bool fOk = ta && tb && strcmp(ta, tb) == 0;
+        if (ta) UnloadFileText(ta);
+        if (tb) UnloadFileText(tb);
+        if (lf) fprintf(lf, "level %d: counts %s  file-roundtrip %s  (%d solids %d decor %d coins)\n",
+                        lv, cOk?"OK":"FAIL", fOk?"OK":"FAIL", cs, cd, cc);
+        allOk = allOk && cOk && fOk;
+    }
+    remove(pa); remove(pb);
+    // editor ops sanity: pick tan A's group by ray, move it, duplicate, delete
+    {
+        BuildWorld(0, true);
+        Ray r = { {7, 40, 20}, {0,-1,0} };            // straight down onto tan A
+        EditorPick(r);
+        bool pOk = (gESelKind == ESEL_GRP && gESelGrp > 0);
+        int g = gESelGrp;
+        Vector3 mn0{},mx0{},mn1{},mx1{};
+        GrpBounds(g, &mn0, &mx0);
+        GrpMove(g, {2,0,0});
+        GrpBounds(g, &mn1, &mx1);
+        bool mOk = fabsf((mn1.x - mn0.x) - 2.0f) < 0.01f;
+        GrpScale(g, 2.0f); GrpScale(g, 0.5f);
+        Vector3 mn2{},mx2{};
+        GrpBounds(g, &mn2, &mx2);
+        bool sOk = fabsf(mx2.x - mx1.x) < 0.05f && fabsf(mx2.y - mx1.y) < 0.05f;
+        int c0 = GrpCount(g);
+        int ng = GrpDuplicate(g, {5,0,0});
+        bool dOk = GrpCount(ng) == c0 && c0 > 0;
+        GrpDelete(ng);
+        bool xOk = GrpCount(ng) == 0;
+        if (lf) fprintf(lf, "editor ops: pick %s  move %s  scale %s  dup %s  del %s\n",
+                        pOk?"OK":"FAIL", mOk?"OK":"FAIL", sOk?"OK":"FAIL", dOk?"OK":"FAIL", xOk?"OK":"FAIL");
+        allOk = allOk && pOk && mOk && sOk && dOk && xOk;
+    }
+    // the override path itself: a saved levels/level0.txt must replace the
+    // code builder on the next BuildWorld(0)  (skipped if the user has one)
+    {
+        char lp[600]; LevelFilePath(lp, sizeof(lp), 0);
+        if (!FileExists(lp)){
+            BuildWorld(0, true);
+            gSpawn = { 3.25f, 77.0f, -4.5f };            // marker
+            SaveLevelFile(0);
+            gSpawn = SPAWN_POS;
+            BuildWorld(0);                                // must load the file
+            bool oOk = fabsf(gSpawn.y - 77.0f) < 0.01f && solids.size() > 100;
+            remove(lp);
+            BuildWorld(0);                                // and come back to code
+            bool bOk = fabsf(gSpawn.y - SPAWN_POS.y) < 0.01f;
+            if (lf) fprintf(lf, "file-override %s  code-fallback %s\n", oOk?"OK":"FAIL", bOk?"OK":"FAIL");
+            allOk = allOk && oOk && bOk;
+        } else if (lf) fprintf(lf, "file-override skipped (levels/level0.txt exists)\n");
+    }
+    char mp[600]; TunPath(mp, sizeof(mp));
+    if (!FileExists(mp)){                         // never clobber the user's tuning
+        float was = GRAV_UP;
+        SaveTuning(); GRAV_UP = was + 7.0f; InitTuning();
+        bool tOk = fabsf(GRAV_UP - was) < 0.01f;
+        remove(mp);
+        if (lf) fprintf(lf, "mechanics round-trip %s\n", tOk?"OK":"FAIL");
+        allOk = allOk && tOk;
+    } else if (lf) fprintf(lf, "mechanics round-trip skipped (mechanics.txt exists)\n");
+    if (lf){ fprintf(lf, "RESULT %s\n", allOk?"PASS":"FAIL"); fclose(lf); }
+    return allOk;
+}
+
 int main(int argc, char** argv){
     bool shot  = (argc > 1) && (strcmp(argv[1], "--shot") == 0);
     bool shotb = (argc > 1) && (strcmp(argv[1], "--shotb") == 0);
     bool shotc = (argc > 1) && (strcmp(argv[1], "--shotc") == 0);
     bool shotd = (argc > 1) && (strcmp(argv[1], "--shotd") == 0);
     bool shote = (argc > 1) && (strcmp(argv[1], "--shote") == 0);
+    bool demo  = (argc > 1) && (strcmp(argv[1], "--demo") == 0);
+    bool edchk = (argc > 1) && (strcmp(argv[1], "--edcheck") == 0);
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1600, 900, "ShroomVault - a foddian pole vault");
@@ -1041,12 +1136,17 @@ int main(int argc, char** argv){
     int rr = GetMonitorRefreshRate(GetCurrentMonitor());
     SetTargetFPS((int)clampf((float)rr, 60, 144));
     snprintf(gSavePath, sizeof(gSavePath), "%sshroomvault_save.txt", GetApplicationDirectory());
-    LoadGfx(); InitSky(); BuildWorld(shote? 4 : shotd? 3 : shotc? 2 : shotb? 1 : 0);
+    if (edchk){ bool ok = EdCheck(); CloseWindow(); return ok? 0 : 1; }
+    // harness modes pin exact coordinates: always build from CODE, never a
+    // player-edited level file
+    bool harness = shot || shotb || shotc || shotd || shote || demo;
+    LoadGfx(); InitSky(); BuildWorld(shote? 4 : shotd? 3 : shotc? 2 : shotb? 1 : 0, harness);
     for (auto& s : solids) if (s.surf == S_QBLOCK) gQTotal++;
 
     if (shot || shotb || shotc || shotd || shote){ ShotMode(); CloseWindow(); return 0; }
-    if (argc > 1 && strcmp(argv[1], "--demo") == 0){ DemoMode(); CloseWindow(); return 0; }
+    if (demo){ DemoMode(); CloseWindow(); return 0; }
 
+    InitTuning();                          // mechanics.txt overrides, if present
     LoadAudioAll(); InitWind(); StartMusic(); LoadSave();
     if (gLevel != 0) ApplyLevelMeta();      // save resumed us elsewhere
     DisableCursor();
@@ -1067,8 +1167,15 @@ int main(int argc, char** argv){
         }
 
         if (IsKeyPressed(KEY_ESCAPE)){
-            gPaused = !gPaused;
-            if (gPaused) EnableCursor(); else { DisableCursor(); gSkipLook = 2; }
+            if (gTunOpen) gTunOpen = false;              // ESC closes overlays first
+            else if (gEditMode){
+                gEditMode = false; gSkipLook = 2;
+                if (gEditDirty) MSG("editor closed with UNSAVED edits (F4, then F5 to keep them)", 4.0f);
+            }
+            else {
+                gPaused = !gPaused;
+                if (gPaused) EnableCursor(); else { DisableCursor(); gSkipLook = 2; }
+            }
         }
         if (!IsWindowFocused() && !gPaused){ gPaused = true; EnableCursor(); }
         if (IsKeyPressed(KEY_M)) gMuted = !gMuted;
@@ -1079,8 +1186,23 @@ int main(int argc, char** argv){
             MSG(gFlyMode? "FLY TEST MODE - not part of the game (F3 to exit)"
                         : "fly mode off - back to the game", 2.5f);
         }
+        if (IsKeyPressed(KEY_F4)){                       // LEVEL EDITOR toggle
+            gEditMode = !gEditMode; gSkipLook = 2;
+            if (gEditMode){
+                gFlyMode = false; gTunOpen = false;
+                MSG("LEVEL EDITOR - LMB pick things, F5 saves the level, F4 exits", 3.5f);
+            } else if (gEditDirty)
+                MSG("editor closed with UNSAVED edits - they play but die on reload (F4, F5 to keep)", 5.0f);
+        }
+        if (IsKeyPressed(KEY_F6)){                       // MECHANIC EDITOR toggle
+            if (gEditMode) MSG("close the level editor (F4) first", 2.5f);
+            else gTunOpen = !gTunOpen;
+        }
+        if (!gEditMode) TuningUpdate();                  // arrows adjust the open panel
 
-        if (!gPaused && gFlyMode){                        // inspect the level, no gameplay
+        if (!gPaused && gEditMode){                       // build the world, no gameplay
+            EditorUpdate(dt);
+        } else if (!gPaused && gFlyMode){                 // inspect the level, no gameplay
             FlyUpdate(dt);
         } else if (!gPaused && gUnlockCine > 0){          // frozen in the unlock cinematic
             float el = CINE_DUR - gUnlockCine;
@@ -1165,7 +1287,7 @@ int main(int argc, char** argv){
 
         BeginDrawing();
         RenderAll(GetCam(), t, true);
-        if (gWon && gWonMenu && !gPaused && !gFlyMode) DrawWinPanel();
+        if (gWon && gWonMenu && !gPaused && !gFlyMode && !gEditMode) DrawWinPanel();
         if (gPaused) DrawPause();
         EndDrawing();
     }

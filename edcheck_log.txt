@@ -1,0 +1,9 @@
+level 0: counts OK  file-roundtrip OK  (149 solids 867 decor 58 coins)
+level 1: counts OK  file-roundtrip OK  (77 solids 1018 decor 29 coins)
+level 2: counts OK  file-roundtrip OK  (30 solids 472 decor 15 coins)
+level 3: counts OK  file-roundtrip OK  (89 solids 519 decor 26 coins)
+level 4: counts OK  file-roundtrip OK  (21 solids 93 decor 16 coins)
+editor ops: pick OK  move OK  scale OK  dup OK  del OK
+file-override OK  code-fallback OK
+mechanics round-trip OK
+RESULT PASS

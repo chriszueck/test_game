@@ -24,6 +24,23 @@ Run **`ShroomVault.exe`**.
 | R (hold 1s) | rage-reset to the meadow |
 | ESC | pause · M mute · F11 fullscreen · Q (paused) save & quit |
 
+### The editors (F4 / F6)
+
+- **F4 — LEVEL EDITOR.** Fly (WASD/SPACE/CTRL, SHIFT boost), **LMB** picks whatever
+  the crosshair hits — a whole mushroom, pipe, or platform selects as one object.
+  **Arrows** move it, **PGUP/PGDN** raise/lower (**ALT** = fine steps), **+/-**
+  scale, **C** duplicate, **X** delete. Number keys **1–0** drop new prefabs at
+  the crosshair (shroom, red shroom, pipe, slab, ?-block, coin, web bloom, spore,
+  updraft, sky platform). The green wire sphere is the spawn, the gold one is the
+  star — both draggable. Blue cages show invisible collision. **F5** saves to
+  `levels/levelN.txt`, and from then on the game loads *your* file for that world
+  (delete the file to get the built-in level back). **F9** reloads the last save.
+- **F6 — MECHANIC EDITOR.** Every physics constant — gravity, vault power, bounce
+  restitution, slam windows, web, spores, the skysail — live-tunable *while you
+  play*. **UP/DOWN** pick, **LEFT/RIGHT** adjust (ALT = fine), **BKSP** resets one
+  (CTRL+BKSP all), **F5** saves to `mechanics.txt` which loads on every startup.
+  Delete the file for factory physics.
+
 **The one rule of the vault:** you must be on solid ground when you release.
 Mid-air releases whiff — unless you release a moment *before* landing: a charged
 release just above the ground is buffered and fires the instant you touch down.
