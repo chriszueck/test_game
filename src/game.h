@@ -56,6 +56,7 @@ static float SLAM_WIN    = 0.30f;   // pressed within this of impact = PERFECT
 static float SLAM_K_GOOD = 0.88f;   // slammed, but early (extra dive speed compensates)
 static float SLAM_K_PERF = 1.15f;   // slammed at the last blink
 static float SLAM_STUN   = 0.35f;   // slamming solid rock hurts
+static float SLAM_TAP    = 0.22f;   // slam+sail both owned: SHIFT tapped shorter than this = SLAM, held = SAIL
 static float HITSTOP_VAULT   = 0.05f;  // impact-frame slow-mo on plant
 static float HITSTOP_PERFECT = 0.11f;
 // THE WALLSPRING (Bonewood): tap the vault key mid-air against a wall and the
@@ -111,6 +112,7 @@ struct Decor {
 // autopilot flags for the --demo verification mode (OR'd into real input)
 static bool gBotHold = false, gBotFwd = false, gBotWeb = false, gBotSlam = false, gBotSail = false;
 static bool gBotKick = false;
+static bool gBotShift = false, gBotShiftPrev = false;   // virtual SHIFT: drives the real tap-vs-hold branch
 
 // web swing: how far a web bloom can be grabbed from
 static float WEB_RANGE = 15.0f;

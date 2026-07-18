@@ -1316,8 +1316,11 @@ static void BuildBonewood(void){
     addCap(3, 68, 60.0f, 2.4f, false);                         // tan step
     addBox({-2,65.3f,72},{2,66,76}, S_WOOD);                   // L4 launch lip
     addCoin(3, 61.3f, 68); addCoin(0, 67.3f, 74);
-    // the spore geyser: a dead stalk venting lift - catch it under sail
-    addUpdraft({0, 46, 94}, 7.0f, 30.0f, 20.0f);
+    // the spore geyser: a dead stalk venting lift - catch it under sail.
+    // A long glide arrives sinking at SAIL_TERM, so the column must out-muscle
+    // that sink hard or it reads as dead air. Its 76 m ceiling still caps the
+    // climb well below anything skippable.
+    addUpdraft({0, 46, 94}, 8.0f, 30.0f, 34.0f);
     addDecor(D_CYL, {0, 0, 94}, {3.4f, 42.0f, 3.4f}, BONE_D, TX_FIBER);   // the venting stump
     addDecor(D_CYL, {0, 41.6f, 94}, {3.9f, 0.6f, 3.9f}, BONE, TX_FIBER);
     addCoin(0, 58, 94); addCoin(0, 68, 94);

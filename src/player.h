@@ -35,6 +35,7 @@ struct Player {
     // skysail hang-glider
     bool  sailing = false;
     float sailOpen = 0, sailTilt = 0;      // 0..1 deploy, -1..1 dive/flare
+    float sailT = 0;                       // seconds this sail has been held open
     bool  inUpdraft = false;
     // wallspring (Bonewood): recent wall contact + buffered press
     float wallT = 0;                       // grace window since last wall touch
@@ -349,10 +350,24 @@ static void PlayerUpdate(float dt, bool inputLocked){
         }
         return;
     }
-    // ---- slam dive: commit mid-air, tuck, drop like a stone
+    // ---- slam & sail share SHIFT. Owning ONE keeps the legacy feel: SHIFT
+    // press = instant slam (Gorge), SHIFT hold = sail (Skyhaven). Owning BOTH:
+    // the press opens the sail at once, and releasing within SLAM_TAP converts
+    // it into the slam - tap to dive, hold to glide. E is always an instant
+    // slam. A slam always snaps the canopy shut; the two states never overlap
+    // (they used to, and slam gravity ate the sail - "the updraft is broken").
     pl.stunT = fmaxf(0.0f, pl.stunT - dt);
-    bool slamKey = !inputLocked && gUnlockSlam && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_E));
-    if ((slamKey || gBotSlam) && !pl.grounded && !pl.webSwinging && !pl.slamming && !pl.planting){
+    bool shiftWasDown = gBotShiftPrev; gBotShiftPrev = gBotShift;
+    bool shiftDown     = (!inputLocked && IsKeyDown(KEY_LEFT_SHIFT))      || gBotShift;
+    bool shiftReleased = (!inputLocked && IsKeyReleased(KEY_LEFT_SHIFT))  || (shiftWasDown && !gBotShift);
+    bool shiftPressed  = (!inputLocked && IsKeyPressed(KEY_LEFT_SHIFT))   || (gBotShift && !shiftWasDown);
+    bool slamNow = gBotSlam
+        || (!inputLocked && gUnlockSlam && IsKeyPressed(KEY_E))
+        || (gUnlockSlam && !gUnlockSail && shiftPressed);
+    if (gUnlockSlam && gUnlockSail && pl.sailing && pl.sailT < SLAM_TAP && shiftReleased)
+        slamNow = true;                                  // the tap: cut the sail, tuck
+    if (slamNow && !pl.grounded && !pl.webSwinging && !pl.slamming && !pl.planting){
+        pl.sailing = false; pl.sailT = 0;                // canopy snaps shut into the dive
         pl.slamming = true; pl.slamT = 0;
         pl.charging = false; pl.pendT = 0;               // pole away - you're a cannonball
         pl.vel.x *= 0.60f; pl.vel.z *= 0.60f;            // commitment: the line is chosen
@@ -362,11 +377,12 @@ static void PlayerUpdate(float dt, bool inputLocked){
         pl.slamT += dt;
         if (pl.grounded) pl.slamming = false;
     }
-    // ---- skysail: hold SHIFT airborne to hang-glide (SKYHAVEN only)
+    // ---- skysail: hold SHIFT airborne to hang-glide
     Vector3 sf = yawFwd(pl.yaw), sr = { -sf.z, 0, sf.x };
-    bool sailHeld = ((!inputLocked && gUnlockSail && IsKeyDown(KEY_LEFT_SHIFT)) || gBotSail);
-    if (sailHeld && !pl.grounded && !pl.webSwinging && !pl.planting && pl.stunT <= 0){
-        if (!pl.sailing){ pl.sailing = true; pl.charging = false; pl.pendT = 0; SND(sWhoosh, 0.7f, 0.45f); }
+    bool sailHeld = (gUnlockSail && shiftDown) || gBotSail;
+    if (sailHeld && !pl.grounded && !pl.webSwinging && !pl.planting && !pl.slamming && pl.stunT <= 0){
+        if (!pl.sailing){ pl.sailing = true; pl.sailT = 0; pl.charging = false; pl.pendT = 0; SND(sWhoosh, 0.7f, 0.45f); }
+        pl.sailT += dt;
     } else pl.sailing = false;
     if (pl.sailing){
         float tiltTgt = 0.0f;
@@ -467,13 +483,17 @@ static void PlayerUpdate(float dt, bool inputLocked){
         }
     }
     if (!pl.charging) pl.poleAngle = fmaxf(0.0f, pl.poleAngle - dt*420.0f);
-    // ---- updraft columns lift you (a lot under sail); ambient wind pushes you
+    // ---- updraft columns lift you (a lot under sail); ambient wind pushes you.
+    // Lift pulls vel.y toward a target RISE RATE (str scaled) instead of adding
+    // raw acceleration - a long dwell can never bank unbounded exit speed, so a
+    // column's ceiling really is its ceiling (+ a small ballistic hop).
     pl.inUpdraft = false;
     for (auto& u : gUpdrafts){
         float dx = pl.pos.x - u.base.x, dz = pl.pos.z - u.base.z;
         if (dx*dx + dz*dz < u.rad*u.rad && pl.pos.y > u.base.y && pl.pos.y < u.base.y + u.hgt){
             pl.inUpdraft = true;
-            pl.vel.y += u.str * (pl.sailing? 1.0f : 0.45f) * dt;
+            float tgt = u.str * (pl.sailing? 0.45f : 0.22f);
+            if (pl.vel.y < tgt) pl.vel.y += (tgt - pl.vel.y) * fminf(1.0f, 5.5f*dt);
             pl.vel.x -= dx*0.9f*dt; pl.vel.z -= dz*0.9f*dt;   // gentle inward pull
         }
     }

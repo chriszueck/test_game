@@ -721,8 +721,9 @@ static void DrawHUD(float t){
     if (t < 22 && !gWon){
         char hint[260] = "WASD run  ·  LMB charge + release: VAULT";
         if (gUnlockWeb)  strcat(hint, "  ·  RMB near blooms: swing");
-        if (gUnlockSlam) strcat(hint, "  ·  SHIFT mid-air: SLAM");
-        if (gUnlockSail) strcat(hint, "  ·  hold SHIFT mid-air: SAIL");
+        if (gUnlockSlam && gUnlockSail) strcat(hint, "  ·  SHIFT tap: SLAM, hold: SAIL");
+        else if (gUnlockSlam) strcat(hint, "  ·  SHIFT mid-air: SLAM");
+        else if (gUnlockSail) strcat(hint, "  ·  hold SHIFT mid-air: SAIL");
         if (gUnlockWall) strcat(hint, "  ·  tap LMB on a wall: SPRING");
         strcat(hint, "  ·  ESC pause");
         drawTextC(hint, W/2, H-30, 18, (Color){255,255,255,150});
@@ -770,8 +771,10 @@ static void DrawPause(void){
     lines[nl++] = "release in the bright GREEN = PERFECT (+15%) - hold past it: FOUL";
     lines[nl++] = "red mushrooms are trampolines. aim for them when you fall";
     if (gUnlockWeb)  lines[nl++] = "hold RMB near a glowing web bloom: swing. let go to fly with it";
-    if (gUnlockSlam) lines[nl++] = "SHIFT mid-air: SLAM. slam a red at the last blink: PERFECT boing";
-    if (gUnlockSail) lines[nl++] = "hold SHIFT mid-air: SKYSAIL. W dive, S flare, A/D steer, ride updrafts";
+    if (gUnlockSlam && gUnlockSail)
+        lines[nl++] = "SHIFT: TAP = slam (E also slams)  ·  HOLD = skysail. W dive, S flare, A/D steer";
+    else if (gUnlockSlam) lines[nl++] = "SHIFT mid-air: SLAM. slam a red at the last blink: PERFECT boing";
+    else if (gUnlockSail) lines[nl++] = "hold SHIFT mid-air: SKYSAIL. W dive, S flare, A/D steer, ride updrafts";
     if (gUnlockWall) lines[nl++] = "tap LMB mid-air against a wall: WALLSPRING. fall in fast = spring out big";
     lines[nl++] = "?-blocks pop a coin on first touch. many roads up, no checkpoints";
     lines[nl++] = "step on a warp pipe to travel to ANY world (new powers at shrines)";
@@ -916,7 +919,10 @@ static void DemoMode(void){
     int rf = 0; bool shotA = false, shotB = false, webPhase = false;
     bool boostPhase = false, slamPhase = false, edgePhase = false, sailPhase = false;
     bool kickPhase = false; float kickY0 = 0, kickYmax = 0;
-    while (T < 28.5f && !WindowShouldClose()){
+    bool glidePhase = false, tapPhase = false;
+    float glideEnterY = 0, glideExitY = 0, glideBoughY = -1; bool glideSlammed = false, glideSailed = false;
+    float tapReleaseT = -1, tapSlamT = -1; bool tapSlammed = false; float tapApexAfter = 0; bool tapBounced = false;
+    while (T < 37.0f && !WindowShouldClose()){
         gBotFwd  = (T > 0.4f && T < 2.2f) || (T > 3.4f && T < 4.0f) || (T > 8.1f && T < 9.05f);
         gBotHold = (T > 1.05f && T < 2.2f) || (T > 3.5f && T < 5.0f)   // vault #1, then over-hold -> FOUL
                 || (T > 8.2f && T < 9.15f);                            // boosted PERFECT vault
@@ -957,7 +963,36 @@ static void DemoMode(void){
             pl = Player(); pl.pos = {0, 10.0f, 9}; pl.vel = {5, 0, 0}; pl.yaw = 1.57f;
         }
         gBotKick = (T > 22.45f && T < 28.0f);    // press held: springs fire on every wall touch
-        if (kickPhase){ kickYmax = fmaxf(kickYmax, pl.pos.y); if (kickY0 == 0) kickY0 = pl.pos.y; }
+        if (kickPhase && T < 28.5f){ kickYmax = fmaxf(kickYmax, pl.pos.y); if (kickY0 == 0) kickY0 = pl.pos.y; }
+        // phase 9: BONEWOOD act 4 - slam AND sail owned, SHIFT *held* through the
+        // spore-geyser updraft. This exact input used to start a SLAM (62 m/s^2)
+        // under the open canopy and the updraft read as broken. Held SHIFT must
+        // now sail and the column must lift the glide.
+        if (!glidePhase && T > 28.6f){
+            glidePhase = true;
+            BuildWorld(5, true); gUnlockSlam = true; gUnlockSail = true; gUnlockWall = false;
+            pl = Player(); pl.pos = {0, 70.0f, 78}; pl.vel = {0, 0, 12}; pl.yaw = 0;
+        }
+        gBotShift = (T > 28.7f && T < 33.2f) || (T > 34.3f && T < 34.4f);
+        if (glidePhase && !tapPhase){
+            if (pl.slamming) glideSlammed = true;
+            if (pl.sailing)  glideSailed = true;
+            if (glideEnterY == 0 && pl.pos.z >= 87)  glideEnterY = pl.pos.y;   // column near edge
+            if (glideExitY  == 0 && pl.pos.z >= 101) glideExitY  = pl.pos.y;   // column far edge
+            if (glideBoughY < 0 && pl.pos.z >= 118)  glideBoughY = pl.pos.y;   // over the landing bough
+        }
+        // phase 10: the tap. SHIFT down 0.1 s then released while falling onto
+        // the Drum - the release must convert into a SLAM (canopy shut).
+        if (!tapPhase && T > 33.6f){
+            tapPhase = true;
+            pl = Player(); pl.pos = {0, 46.0f, 55}; pl.vel = {0,0,0}; pl.yaw = 0;
+        }
+        if (tapPhase){
+            if (tapReleaseT < 0 && T > 34.4f) tapReleaseT = T;
+            if (pl.slamming && !tapSlammed){ tapSlammed = true; tapSlamT = T; }
+            if (tapSlammed && pl.vel.y > 5.0f) tapBounced = true;              // the drum answered
+            if (tapBounced) tapApexAfter = fmaxf(tapApexAfter, pl.pos.y);
+        }
         PlayerUpdate(dt, false);
         maxY = fmaxf(maxY, pl.pos.y);
         T += dt;
@@ -973,12 +1008,20 @@ static void DemoMode(void){
         if (!shotA && T > 2.62f){ TakeScreenshot("demo_flight.png"); shotA = true; }   // vault kick
         if (!shotB && T > 5.9f){ TakeScreenshot("demo_swing.png"); shotB = true; }     // web swing
     }
-    gBotFwd = gBotHold = gBotWeb = gBotSlam = gBotSail = gBotKick = false; gBoostT = 0;
+    gBotFwd = gBotHold = gBotWeb = gBotSlam = gBotSail = gBotKick = gBotShift = false; gBoostT = 0;
     if (lf){
         fprintf(lf, "SUMMARY maxY=%.2f vaults=%d fouls=%d falls=%d final=(%.1f,%.1f,%.1f)\n",
                 maxY, pl.vaults, pl.fouls, pl.falls, pl.pos.x, pl.pos.y, pl.pos.z);
         fprintf(lf, "WALLSPRING start=%.1f peak=%.1f climbed=%.1f (chain up the split trunk)\n",
                 kickY0, kickYmax, kickYmax - kickY0);
+        bool glideOk = glideSailed && !glideSlammed && glideExitY > glideEnterY + 2.0f
+                    && glideBoughY > 58.0f;
+        fprintf(lf, "SHIFTHOLD=SAIL %s  sailed=%d slammed=%d enterY=%.1f exitY=%.1f boughY=%.1f (updraft must lift the glide)\n",
+                glideOk? "OK":"FAIL", glideSailed?1:0, glideSlammed?1:0, glideEnterY, glideExitY, glideBoughY);
+        bool tapOk = tapSlammed && tapReleaseT > 0 && (tapSlamT - tapReleaseT) < 0.15f && tapBounced;
+        fprintf(lf, "SHIFTTAP=SLAM %s  slammed=%d dt=%.2f bounced=%d apexAfter=%.1f (release converts to the dive)\n",
+                tapOk? "OK":"FAIL", tapSlammed?1:0, tapSlammed? (tapSlamT - tapReleaseT) : -1.0f,
+                tapBounced?1:0, tapApexAfter);
         fclose(lf);
     }
 }
