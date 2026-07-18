@@ -4,7 +4,8 @@ Updated: 2026-07-18
 
 ## Current state
 
-Playable, 5 worlds (Castle, Megashroom, Sporeway, Gorge, Skyhaven). Builds with
+Playable, 6 worlds (Castle, Megashroom, Sporeway, Gorge, Skyhaven, Bonewood).
+Builds with
 `build.bat` (release) / `build.bat dev` (console). Verified via `--demo`
 (physics autopilot), `--shot*` (screenshots), and `--edcheck` (editor +
 serialization self-test, writes `edcheck_log.txt`).
@@ -28,9 +29,25 @@ serialization self-test, writes `edcheck_log.txt`).
    step, description). Adjust live while playing; F5 → `mechanics.txt`, loaded
    at startup by `InitTuning()`.
 
+4. **THE BONEWOOD (level 5, warp key 6)** — hardest world, new mechanic
+   **WALLSPRING** (`player.h`: tap LMB mid-air within `WALL_GRACE` of a wall
+   contact → kick `WALL_VY + WALL_CONV·fallspeed` up, `WALL_OUT` away; contact
+   set in `moveHoriz`/`resolveCylsRadial`). Unlocked at the Springheart shrine
+   (type 3, green). Six acts, each gating a mechanic: wallspring chimney ×2,
+   web-only crossing, PERFECT-slam-only drum (drop 14 → apex 28.5 needed 24.7;
+   good slam reaches 19.8 — fails), sail+updraft glide (unsailed range 17 m vs
+   42 m gap), spore-turbo shelves (+9.5 m vs 7.6 m unboosted max). One red
+   bail. Anti-cheese: all mid-void ledges are floating slabs (no kickable
+   column pairs); P2↔drum faces 6.4 m apart (kick cycle nets <1 m there).
+
 ## Verification status
 
-- `--edcheck` PASS: per-level save→load→save byte-identical roundtrip (all 5),
+- Demo phase 8 PASS: wallspring bot chained 27 m up the Split Trunk through
+  real physics and landed on the 34 m exit lip (`demo_log.txt` WALLSPRING line).
+- Bonewood acts 2–5 are **math-verified only** (ranges/windows derived from
+  live constants, mirroring proven Gorge/Skyhaven/Sporeway numbers) — not yet
+  hand-driven end to end.
+- `--edcheck` PASS: per-level save→load→save byte-identical roundtrip (all 6),
   editor pick/move/scale/dup/delete ops, file-override + code-fallback path,
   mechanics.txt roundtrip.
 - `--demo` clean: vault, foul, web swing, perfect slam, Skyhaven updraft

@@ -172,7 +172,7 @@ static Vector3 gUnlockCinePos = {0,0,0};
 static void UpdateShrines(void){
     if (gUnlockCine > 0) return;   // one at a time
     for (auto& sh : gShrines){
-        bool owned = (sh.type == 0)? gUnlockWeb : gUnlockSlam;
+        bool owned = (sh.type == 0)? gUnlockWeb : (sh.type == 3)? gUnlockWall : gUnlockSlam;
         if (owned) continue;
         float dx = pl.pos.x-sh.p.x, dy = pl.pos.y-sh.p.y, dz = pl.pos.z-sh.p.z;
         if (dx*dx+dz*dz < 2.6f*2.6f && fabsf(dy) < 2.6f){
@@ -180,6 +180,10 @@ static void UpdateShrines(void){
                 gUnlockWeb = true;
                 gUnlockName = "WEB SWING";
                 gUnlockSub  = "hold RMB near a glowing bloom - release to fly";
+            } else if (sh.type == 3){
+                gUnlockWall = true;
+                gUnlockName = "THE WALLSPRING";
+                gUnlockSub  = "tap LMB mid-air against a wall - fall in fast, spring out BIG";
             } else {
                 gUnlockSlam = true;
                 gUnlockName = "THE SLAM";
@@ -194,10 +198,13 @@ static void UpdateShrines(void){
 }
 static void DrawShrines(float t){
     for (auto& sh : gShrines){
-        bool owned  = (sh.type == 0)? gUnlockWeb : gUnlockSlam;
-        Color core   = (sh.type == 0)? (Color){130,225,255,255} : (Color){255,110,80,255};
-        Color petalA = (sh.type == 0)? (Color){120,210,255,255} : (Color){255,120,70,255};
-        Color petalB = (sh.type == 0)? (Color){178,155,255,255} : (Color){255,190,90,255};
+        bool owned  = (sh.type == 0)? gUnlockWeb : (sh.type == 3)? gUnlockWall : gUnlockSlam;
+        Color core   = (sh.type == 0)? (Color){130,225,255,255}
+                     : (sh.type == 3)? (Color){120,245,175,255} : (Color){255,110,80,255};
+        Color petalA = (sh.type == 0)? (Color){120,210,255,255}
+                     : (sh.type == 3)? (Color){110,235,160,255} : (Color){255,120,70,255};
+        Color petalB = (sh.type == 0)? (Color){178,155,255,255}
+                     : (sh.type == 3)? (Color){200,255,180,255} : (Color){255,190,90,255};
         // bloom: 0 = closed bud, 1 = fully open. Ramps open during the cinematic.
         float bloom = 0.0f;
         bool cineHere = (gUnlockCine > 0 && Vector3Distance(sh.p, gUnlockCinePos) < 0.6f);
@@ -256,7 +263,8 @@ static void DrawShrines(float t){
 static void DrawUnlockOrb(const Camera3D& cam){
     if (gUnlockCine <= 0) return;
     float el = CINE_DUR - gUnlockCine;
-    Color oc = gUnlockCineType? (Color){255,140,90,255} : (Color){150,225,255,255};
+    Color oc = (gUnlockCineType == 0)? (Color){150,225,255,255}
+             : (gUnlockCineType == 3)? (Color){140,250,180,255} : (Color){255,140,90,255};
     Vector3 fwd = Vector3Normalize(cam.target - cam.position);
     if (el < 1.9f){                               // gathering + rising from the core
         float rise = clampf(el/1.5f, 0, 1);
@@ -446,6 +454,15 @@ void FX_QCoin(Vector3 blockTop){
     SND(sDing, 1.45f, 0.7f);
     SpawnSparkle(blockTop, 10);
 }
+void FX_WallSpring(Vector3 pos, float power){
+    SND(sPlant, 1.25f, 0.7f);                      // the tip bites the bark
+    SND(sBoing, 1.55f - clampf(power*0.012f, 0.0f, 0.5f), 0.8f);   // deep twang on big springs
+    SpawnDust(pos, 6 + (int)clampf(power*0.4f, 0, 8), {182,150,104,255});
+    if (power > 14.0f) SpawnSparkle(pos, 6);       // a fast catch glints
+    gShake += 0.10f + clampf(power*0.008f, 0.0f, 0.25f);
+    static bool tip = false;
+    if (!tip){ tip = true; MSG("WALLSPRING! The longer you fall before the tap, the bigger the spring.", 4.5f); }
+}
 static float gSlamMsgT = 0;
 void FX_Slam(){
     SND(sWhoosh, 0.52f, 0.85f);                    // the tuck: a low dive-roar
@@ -506,9 +523,11 @@ static float readKey(const char* txt, const char* key, float def){
 static void SetLevelUnlocks(float resumeY){
     bool pastWeb  = (gLevel == 1 && resumeY > 68.0f);   // resumed above the Weaver's Bloom
     bool pastSlam = (gLevel == 3 && resumeY >  6.0f);   // resumed up a Gorge shaft, past the mouth
-    gUnlockWeb  = (gLevel == 2 || gLevel == 3) || pastWeb;
-    gUnlockSlam = pastSlam;
-    gUnlockSail = (gLevel == 4);                        // SKYHAVEN: the hang-glider is the world
+    bool pastWall = (gLevel == 5 && resumeY >  6.0f);   // resumed up the Bonewood, past the Springheart
+    gUnlockWeb  = (gLevel == 2 || gLevel == 3 || gLevel == 5) || pastWeb;
+    gUnlockSlam = (gLevel == 5) || pastSlam;            // the Bonewood assumes every earned power
+    gUnlockSail = (gLevel == 4 || gLevel == 5);
+    gUnlockWall = pastWall;                             // fresh entries earn it at the Springheart
 }
 static void LoadSave(void){
     char* txt = LoadFileText(gSavePath);
@@ -519,7 +538,7 @@ static void LoadSave(void){
     gTotFalls  = (int)readKey(txt,"totFalls",0);
     gTotVaults = (int)readKey(txt,"totVaults",0);
     int lv = (int)readKey(txt,"level",0);
-    if (lv >= 1 && lv <= 4 && gLevel != lv){
+    if (lv >= 1 && lv <= 5 && gLevel != lv){
         BuildWorld(lv);                               // resume on the saved level
         pl.pos = gSpawn;
     }
@@ -651,7 +670,8 @@ static void DrawHUD(float t){
     }
     if (gUnlockCine > 0){                              // the unlock cinematic overlay
         float el = CINE_DUR - gUnlockCine;
-        Color tc = gUnlockCineType? (Color){255,150,90,255} : (Color){150,225,255,255};
+        Color tc = (gUnlockCineType == 0)? (Color){150,225,255,255}
+                 : (gUnlockCineType == 3)? (Color){140,250,180,255} : (Color){255,150,90,255};
         // cinematic letterbox bars
         float barK = clampf(fminf(el/0.4f, gUnlockCine/0.5f), 0, 1);
         int bh = (int)(H*0.11f*barK);
@@ -703,6 +723,7 @@ static void DrawHUD(float t){
         if (gUnlockWeb)  strcat(hint, "  ·  RMB near blooms: swing");
         if (gUnlockSlam) strcat(hint, "  ·  SHIFT mid-air: SLAM");
         if (gUnlockSail) strcat(hint, "  ·  hold SHIFT mid-air: SAIL");
+        if (gUnlockWall) strcat(hint, "  ·  tap LMB on a wall: SPRING");
         strcat(hint, "  ·  ESC pause");
         drawTextC(hint, W/2, H-30, 18, (Color){255,255,255,150});
     }
@@ -712,19 +733,19 @@ static void DrawHUD(float t){
     }
     if (gOnWarp && !gWon){
         float p = 0.7f + 0.3f*sinf((float)GetTime()*6.0f);
-        static const char* worlds[5] = {"Castle", "Megashroom", "Sporeway", "Gorge", "Skyhaven"};
-        int panelW = 460, panelH = 236, px = W/2 - panelW/2, py = H/2 + 40;
+        static const char* worlds[6] = {"Castle", "Megashroom", "Sporeway", "Gorge", "Skyhaven", "Bonewood"};
+        int panelW = 460, panelH = 264, px = W/2 - panelW/2, py = H/2 + 40;
         DrawRectangleRounded((Rectangle){(float)px,(float)py,(float)panelW,(float)panelH}, 0.10f, 8, (Color){18,26,20,225});
         DrawRectangleRoundedLinesEx((Rectangle){(float)px,(float)py,(float)panelW,(float)panelH}, 0.10f, 8, 3,
                                     (Color){140,235,140,(unsigned char)(255*p)});
         drawTextC("WARP  ·  travel to any world", W/2, py+16, 22, (Color){140,235,140,255});
-        for (int i=0;i<5;i++){
+        for (int i=0;i<6;i++){
             bool here = (i == gLevel);
             Color c = here? (Color){120,180,120,200} : (Color){245,250,240,255};
             drawTextC(TextFormat("[%d]   %s%s", i+1, worlds[i], here? "   (you are here)" : ""),
                       W/2, py+52+i*28, 20, c);
         }
-        drawTextC("press a number  ·  or walk off to stay", W/2, py+206, 17, (Color){200,220,200,220});
+        drawTextC("press a number  ·  or walk off to stay", W/2, py+234, 17, (Color){200,220,200,220});
     }
     if (gMuted) drawTextSh("[M] sound off", 16, H-32, 17, (Color){255,255,255,130});
     drawTextSh(TextFormat("%d fps", GetFPS()), W-86, H-32, 17, (Color){255,255,255,140});
@@ -751,6 +772,7 @@ static void DrawPause(void){
     if (gUnlockWeb)  lines[nl++] = "hold RMB near a glowing web bloom: swing. let go to fly with it";
     if (gUnlockSlam) lines[nl++] = "SHIFT mid-air: SLAM. slam a red at the last blink: PERFECT boing";
     if (gUnlockSail) lines[nl++] = "hold SHIFT mid-air: SKYSAIL. W dive, S flare, A/D steer, ride updrafts";
+    if (gUnlockWall) lines[nl++] = "tap LMB mid-air against a wall: WALLSPRING. fall in fast = spring out big";
     lines[nl++] = "?-blocks pop a coin on first touch. many roads up, no checkpoints";
     lines[nl++] = "step on a warp pipe to travel to ANY world (new powers at shrines)";
     lines[nl++] = "";
@@ -769,10 +791,10 @@ static void DrawPause(void){
 static bool gWonMenu = false;      // the choice panel after touching the star
 static void DrawWinPanel(void){
     int W = GetScreenWidth(), H = GetScreenHeight();
-    static const char* titles[5] = {
+    static const char* titles[6] = {
         "* YOU VAULTED THE CASTLE *", "* THE MEGASHROOM IS CLIMBED *",
         "* THE SPOREWAY IS CROSSED *", "* THE GORGE IS CONQUERED *",
-        "* SKYHAVEN IS YOURS *" };
+        "* SKYHAVEN IS YOURS *", "* THE BONEWOOD BOWS TO YOU *" };
     DrawPanelBG(640, 388);
     int y = (H-388)/2 + 30;
     drawTextC(titles[gLevel], W/2, y, 32, C_GOLD); y += 52;
@@ -806,7 +828,10 @@ static void RenderAll(Camera3D cam, float t, bool hud){
         DrawSpores(t);
         DrawShrines(t);
         DrawUnlockOrb(cam);
-        if (gLevel == 4){ DrawUpdrafts(t); DrawWindmills(t); DrawBanners(t); DrawPinwheels(t); }
+        if (!gUpdrafts.empty())  DrawUpdrafts(t);
+        if (!gWindmills.empty()) DrawWindmills(t);
+        if (!gBanners.empty())   DrawBanners(t);
+        if (!gPinwheels.empty()) DrawPinwheels(t);
         DrawMotes(t);
         DrawStar(t, gWon);
         DrawGoalBeam(t);
@@ -857,7 +882,14 @@ static void ShotMode(void){
         {{ 33,100.0f,-2},   62, 12, 0,     "shotK4.png"},   // the colossal Skymill ahead
         {{ 40,146.0f, 8},  118,  6, 0,     "shotK5.png"},   // the star crowning the great mill
     };
-    const Preset* P = (gLevel==4)? sky2 : (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
+    static const Preset bone[5] = {
+        {{0,0.91f,-16},     0,  10, 0,     "shotW1.png"},   // spawn: shrine + split trunk
+        {{0,3.5f,9},        0,  60, 0,     "shotW2.png"},   // inside the first chimney, looking up
+        {{0,35.0f,14},      0,   6, 0,     "shotW3.png"},   // L1: blooms + bone pillar ahead
+        {{0,55.5f,61},      0,   8, 0,     "shotW4.png"},   // E3: the long glide + venting stump
+        {{8,127.2f,157},    0,  10, 0,     "shotW5.png"},   // the crown perch: cap + star
+    };
+    const Preset* P = (gLevel==5)? bone : (gLevel==4)? sky2 : (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
     int n = (gLevel==2)? 4 : (gLevel==1)? 4 : 5;
     for (int i=0;i<n;i++){
         pl.pos = P[i].pos; pl.yaw = P[i].yawD*DEG2RAD; pl.pitch = P[i].pitchD*DEG2RAD;
@@ -883,7 +915,8 @@ static void DemoMode(void){
     float T = 0, maxY = 0;
     int rf = 0; bool shotA = false, shotB = false, webPhase = false;
     bool boostPhase = false, slamPhase = false, edgePhase = false, sailPhase = false;
-    while (T < 22.5f && !WindowShouldClose()){
+    bool kickPhase = false; float kickY0 = 0, kickYmax = 0;
+    while (T < 28.5f && !WindowShouldClose()){
         gBotFwd  = (T > 0.4f && T < 2.2f) || (T > 3.4f && T < 4.0f) || (T > 8.1f && T < 9.05f);
         gBotHold = (T > 1.05f && T < 2.2f) || (T > 3.5f && T < 5.0f)   // vault #1, then over-hold -> FOUL
                 || (T > 8.2f && T < 9.15f);                            // boosted PERFECT vault
@@ -918,6 +951,13 @@ static void DemoMode(void){
             pl.pos.x = -57.0f; pl.pos.z = 8.0f;  // harness-only - proves the column's height CAP (~P1, not the moon)
             pl.vel.x = 0; pl.vel.z = 0;
         }
+        if (!kickPhase && T > 22.4f){    // phase 8: BONEWOOD wallspring chain up the split trunk
+            kickPhase = true;
+            BuildWorld(5, true); gUnlockWall = true;
+            pl = Player(); pl.pos = {0, 10.0f, 9}; pl.vel = {5, 0, 0}; pl.yaw = 1.57f;
+        }
+        gBotKick = (T > 22.45f && T < 28.0f);    // press held: springs fire on every wall touch
+        if (kickPhase){ kickYmax = fmaxf(kickYmax, pl.pos.y); if (kickY0 == 0) kickY0 = pl.pos.y; }
         PlayerUpdate(dt, false);
         maxY = fmaxf(maxY, pl.pos.y);
         T += dt;
@@ -933,10 +973,12 @@ static void DemoMode(void){
         if (!shotA && T > 2.62f){ TakeScreenshot("demo_flight.png"); shotA = true; }   // vault kick
         if (!shotB && T > 5.9f){ TakeScreenshot("demo_swing.png"); shotB = true; }     // web swing
     }
-    gBotFwd = gBotHold = gBotWeb = gBotSlam = gBotSail = false; gBoostT = 0;
+    gBotFwd = gBotHold = gBotWeb = gBotSlam = gBotSail = gBotKick = false; gBoostT = 0;
     if (lf){
         fprintf(lf, "SUMMARY maxY=%.2f vaults=%d fouls=%d falls=%d final=(%.1f,%.1f,%.1f)\n",
                 maxY, pl.vaults, pl.fouls, pl.falls, pl.pos.x, pl.pos.y, pl.pos.z);
+        fprintf(lf, "WALLSPRING start=%.1f peak=%.1f climbed=%.1f (chain up the split trunk)\n",
+                kickY0, kickYmax, kickYmax - kickY0);
         fclose(lf);
     }
 }
@@ -990,6 +1032,16 @@ static Trig gTrigsSky2[] = {
     {50.0f, "Chain it: vault, sail, catch the lift, line up the next terrace.", false},
     {74.0f, "The great mill. One last soar to its crown and the star.", false},
 };
+static Trig gTrigsBone[] = {
+    { 4.0f, "THE BONEWOOD. Tap LMB mid-air against a wall: WALLSPRING.", false},
+    {14.0f, "Chain springs wall to wall. Fall in FAST, spring out BIG.", false},
+    {36.0f, "Silk over the void. Two blooms, no nets, one red far below.", false},
+    {46.0f, "The drum. Only a PERFECT slam rings high enough. SHIFT late.", false},
+    {62.0f, "Unfurl the sail off the lip - the dead stalk ahead still breathes lift.", false},
+    {73.0f, "Ember shelves. Spore up, chain the turbo vaults before the glow dies.", false},
+    {95.0f, "The hollow bone. 40 meters of wallsprings. The floor is very honest.", false},
+    {126.0f,"The crown. One vault, one bounce, one star.", false},
+};
 static Trig gTrigsGorge[] = {
     { 3.5f, "THE GORGE. Press SHIFT mid-air to SLAM. Slam a red cap: mega-boing.", false},
     { 8.5f, "Slam LATE - a blink before impact - for a PERFECT. Chain them to climb.", false},
@@ -1007,11 +1059,12 @@ static void ApplyLevelMeta(void){
     else if (gLevel == 2){ gTrigs = gTrigsSky;    gTrigN = (int)(sizeof(gTrigsSky)/sizeof(Trig)); }
     else if (gLevel == 3){ gTrigs = gTrigsGorge;  gTrigN = (int)(sizeof(gTrigsGorge)/sizeof(Trig)); }
     else if (gLevel == 4){ gTrigs = gTrigsSky2;   gTrigN = (int)(sizeof(gTrigsSky2)/sizeof(Trig)); }
+    else if (gLevel == 5){ gTrigs = gTrigsBone;   gTrigN = (int)(sizeof(gTrigsBone)/sizeof(Trig)); }
     else                 { gTrigs = gTrigsCastle; gTrigN = (int)(sizeof(gTrigsCastle)/sizeof(Trig)); }
     for (int i=0;i<gTrigN;i++) gTrigs[i].done = false;
 }
 static void GoToLevel(int lv){
-    BuildWorld(((lv % 5) + 5) % 5);
+    BuildWorld(((lv % 6) + 6) % 6);
     pl = Player();
     pl.pos = gSpawn; pl.apexY = gSpawn.y;
     gWon = false; gWonMenu = false; gTime = 0; gTimerStarted = false;
@@ -1021,16 +1074,17 @@ static void GoToLevel(int lv){
     ApplyLevelMeta();
     gMsgs.clear();
     SND(sPop, 0.6f, 0.9f); SND(sWhoosh, 0.7f, 0.8f);
-    static const char* names[5] = {
+    static const char* names[6] = {
         "Back to the castle meadow.",
         "* THE MEGASHROOM *  climb high, bounce well.",
         "* THE SPOREWAY *  swing far, chain the spores.",
         "* THE GORGE *  slam late. Climb the thunder.",
-        "* SKYHAVEN *  ride the wind. Hold SHIFT to sail." };
+        "* SKYHAVEN *  ride the wind. Hold SHIFT to sail.",
+        "* THE BONEWOOD *  every power you own, or the grove keeps you." };
     MSG(names[gLevel], 4.5f);
     SaveGame();
 }
-static void SwitchLevel(void){ GoToLevel((gLevel + 1) % 5); }
+static void SwitchLevel(void){ GoToLevel((gLevel + 1) % 6); }
 
 // --edcheck: level-file serialization round-trip. For every level: build from
 // code, save, clear, load, save again - the two files must be identical and
@@ -1042,7 +1096,7 @@ static bool EdCheck(void){
     char pa[600], pb[600];
     snprintf(pa, sizeof(pa), "%sedcheck_a.txt", GetApplicationDirectory());
     snprintf(pb, sizeof(pb), "%sedcheck_b.txt", GetApplicationDirectory());
-    for (int lv=0; lv<5; lv++){
+    for (int lv=0; lv<6; lv++){
         BuildWorld(lv, true);
         int cs=(int)solids.size(), cd=(int)decor.size(), cc=(int)gCoins.size(),
             cw=(int)gWebAnchors.size(), cu=(int)gUpdrafts.size(), cm=(int)gWindmills.size();
@@ -1125,6 +1179,7 @@ int main(int argc, char** argv){
     bool shotc = (argc > 1) && (strcmp(argv[1], "--shotc") == 0);
     bool shotd = (argc > 1) && (strcmp(argv[1], "--shotd") == 0);
     bool shote = (argc > 1) && (strcmp(argv[1], "--shote") == 0);
+    bool shotw = (argc > 1) && (strcmp(argv[1], "--shotw") == 0);
     bool demo  = (argc > 1) && (strcmp(argv[1], "--demo") == 0);
     bool edchk = (argc > 1) && (strcmp(argv[1], "--edcheck") == 0);
     SetTraceLogLevel(LOG_WARNING);
@@ -1139,11 +1194,11 @@ int main(int argc, char** argv){
     if (edchk){ bool ok = EdCheck(); CloseWindow(); return ok? 0 : 1; }
     // harness modes pin exact coordinates: always build from CODE, never a
     // player-edited level file
-    bool harness = shot || shotb || shotc || shotd || shote || demo;
-    LoadGfx(); InitSky(); BuildWorld(shote? 4 : shotd? 3 : shotc? 2 : shotb? 1 : 0, harness);
+    bool harness = shot || shotb || shotc || shotd || shote || shotw || demo;
+    LoadGfx(); InitSky(); BuildWorld(shotw? 5 : shote? 4 : shotd? 3 : shotc? 2 : shotb? 1 : 0, harness);
     for (auto& s : solids) if (s.surf == S_QBLOCK) gQTotal++;
 
-    if (shot || shotb || shotc || shotd || shote){ ShotMode(); CloseWindow(); return 0; }
+    if (shot || shotb || shotc || shotd || shote || shotw){ ShotMode(); CloseWindow(); return 0; }
     if (demo){ DemoMode(); CloseWindow(); return 0; }
 
     InitTuning();                          // mechanics.txt overrides, if present
@@ -1260,7 +1315,8 @@ int main(int argc, char** argv){
                     if (IsKeyPressed(KEY_THREE)) pick = 2;
                     if (IsKeyPressed(KEY_FOUR))  pick = 3;
                     if (IsKeyPressed(KEY_FIVE))  pick = 4;
-                    if (IsKeyPressed(KEY_ENTER)) pick = (gLevel + 1) % 5;
+                    if (IsKeyPressed(KEY_SIX))   pick = 5;
+                    if (IsKeyPressed(KEY_ENTER)) pick = (gLevel + 1) % 6;
                     if (pick >= 0 && pick != gLevel) GoToLevel(pick);
                 }
             }

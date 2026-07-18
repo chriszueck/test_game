@@ -21,6 +21,7 @@ Run **`ShroomVault.exe`**.
 | **sprint into the plant** | run speed converts into extra height — sprint-vaults go much bigger |
 | **hold RMB** (or tap F) | near a glowing **web bloom**: swing from it. Let go to fly with your momentum — *unlocked at the Weaver's Bloom shrine (world 2)* |
 | **SHIFT** (or E) mid-air | **SLAM** — tuck and drop. Slam a red cap at the last blink: **PERFECT SLAM**, the bounce returns *more* than you brought — *unlocked at the Thunder Shrine (world 4)* |
+| **tap LMB / SPACE mid-air on a wall** | **WALLSPRING** — kick off the wall; fall in faster = spring out bigger — *unlocked at the Springheart shrine (world 6)* |
 | R (hold 1s) | rage-reset to the meadow |
 | ESC | pause · M mute · F11 fullscreen · Q (paused) save & quit |
 
@@ -72,6 +73,27 @@ bailed into a red mushroom, and every fall goes exactly as far as you earned.
 - gate-tower slabs → **?-block bridge** → keep balconies
 - **giant shroom stack** in the east courtyard → beams bolted to the keep
 - bold **gap-bricks** straight across — long sprint-vaults, big air
+
+### Level 6: THE BONEWOOD  *(the hardest climb)*
+A twilight grove of **petrified giants** — bleached stalks, cracked grey caps,
+teal grave-lights — and the game's final exam. The new power is the
+**WALLSPRING**: *tap LMB mid-air against a wall* and the pole kicks you off it.
+The longer you fall before the tap, the bigger the spring — so a chimney is a
+rhythm of catches, not a mash. And every old power is a **gate**, not a garnish:
+
+1. **The Split Trunk** — a 34 m bark chimney; wallspring chains only.
+2. **The Silk Crossing** — 26 m of nothing; two web blooms are the only road.
+3. **The Drum** — a red cap 24 m below the only exit ledge: a **PERFECT slam**
+   rings high enough, a good one does not.
+4. **The Long Glide** — a 42 m gap on the **skysail**, threading the one dead
+   stalk that still vents an updraft.
+5. **The Ember Shelves** — +9.5 m rises that only **golden-spore** turbo vaults
+   can clear, chained before the glow dies.
+6. **The Hollow Bone** — 40 m of wallsprings to the crown, then one vault, one
+   bounce, one star.
+
+One red bail on the whole climb. Falls go to the grove floor. The grove is
+patient.
 
 ### Level 5: SKYHAVEN
 A kingdom of colossal windmills in the open sky, built around the **SKYSAIL**.

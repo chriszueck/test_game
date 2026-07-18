@@ -1248,6 +1248,169 @@ static void BuildSkyhaven(void){
     addWarpPipe({-64, 2.0f, -5}, {150,190,250,255});
 }
 
+// -------------------------------------------- level 5: THE BONEWOOD -------
+// A twilight grove of petrified giants, and the hardest climb in the game.
+// The new power is the WALLSPRING (tap LMB mid-air against a wall to kick off
+// it) - and every old power is a GATE here, not a garnish:
+//   act 1  THE SPLIT TRUNK   - 34 m chimney, wallspring chains only
+//   act 2  THE SILK CROSSING - 26 m void, two blooms, web swing only
+//   act 3  THE DRUM          - a red cap 24 m below the only ledge: PERFECT
+//                              slam or nothing
+//   act 4  THE LONG GLIDE    - 42 m gap, skysail + one spore-geyser updraft
+//   act 5  THE EMBER SHELVES - +9.5 m rises: golden-spore turbo chains only
+//   act 6  THE HOLLOW BONE   - 40 m chimney to the crown, then a bounce
+//                              through the star
+// Falls go all the way to the grove floor. One red bail on the whole climb.
+static void BuildBonewood(void){
+    gSpawn = { 0, 0.91f, -20 };
+    gStarP = { 8, 132.6f, 168 };
+
+    addBox({-220,-2,-80},{220,0,280}, S_GRASS);
+    addWarpPipe({12,0,-24}, {228,222,205,255});    // bone-white flag home
+
+    // colors of the dead wood
+    const Color BONE   = {235,228,210,255};
+    const Color BONE_D = {205,196,176,255};
+    const Color GLOW   = {120,235,215,255};        // teal grave-lights
+
+    // THE SPRINGHEART: the shrine that wakes the wallspring, right at the
+    // mouth of the first chimney (type 3)
+    addShrine({0,0,0}, 3);
+
+    // ---- act 1: THE SPLIT TRUNK (ground -> 34) -----------------------------
+    // two bark walls 4.5 m apart; spring wall to wall all the way up
+    addBox({-4.25f,0,6},{-2.25f,34,12}, S_WOOD);
+    addBox({ 2.25f,0,6},{ 4.25f,34,12}, S_WOOD);
+    addBox({-2.25f,33.3f,12},{2.25f,34,16}, S_WOOD);          // L1 exit lip
+    addCoin(0,  9, 9); addCoin(0, 17, 9); addCoin(0, 25, 9); addCoin(0, 32, 9);
+    addCoin(0, 35.3f, 14);
+    // bark ribs + a shattered crown on each wall stump
+    for (int k=0;k<4;k++){
+        addDecor(D_CUBE, {-3.25f, 4.0f+k*8.5f, 9}, {2.3f, 0.5f, 6.4f}, (Color){118,78,42,255}, TX_WOOD);
+        addDecor(D_CUBE, { 3.25f, 8.0f+k*8.5f, 9}, {2.3f, 0.5f, 6.4f}, (Color){118,78,42,255}, TX_WOOD);
+    }
+    addDecor(D_CONE, {-3.25f, 34, 7.2f}, {1.2f, 2.6f, 1.2f}, BONE_D, TX_FIBER);
+    addDecor(D_CONE, { 3.25f, 34, 10.8f}, {1.0f, 3.2f, 1.0f}, BONE_D, TX_FIBER);
+
+    // ---- act 2: THE SILK CROSSING (34 -> pillar top 38) --------------------
+    addWebAnchor({0, 45, 24});
+    addWebAnchor({2, 48, 38});
+    addCoin(0, 41, 24); addCoin(2, 44, 38);
+    addShroom({-6,0,30}, 6.0f, 4.2f, true);        // the ONE red bail of the grove
+    // P2: a snapped bone pillar (collision cyl + bone visual)
+    addCyl({0,0,44}, 2.6f, 38, S_DARK, false, false);
+    addDecor(D_CYL, {0,0,44}, {2.75f, 38.2f, 2.75f}, BONE, TX_FIBER);
+    addDecor(D_CYL, {0,37.6f,44}, {3.0f, 0.5f, 3.0f}, BONE_D, TX_FIBER);
+    addCoin(0, 39.3f, 44);
+
+    // ---- act 3: THE DRUM (38 -> 54, PERFECT slam only) ---------------------
+    // vault off P2 over the red drum, dive, ring it at the last blink
+    addCyl({0,0,55}, 2.0f, 28, S_DARK, false, false);         // drum stalk
+    addDecor(D_CYL, {0,0,55}, {2.15f, 27.2f, 2.15f}, BONE, TX_FIBER);
+    addCap(0, 55, 30.0f, 2.6f, true);                          // the drum head
+    addBox({-2,53.3f,58.5f},{2,54,63}, S_WOOD);                // E3: the only exit
+    addCoin(0, 43, 55);                                        // mid-dive prize
+    addCoin(0, 55.3f, 61);
+
+    // ---- act 4: THE LONG GLIDE (54 -> 66 -> sail 42 m -> 56) ---------------
+    addCap(3, 68, 60.0f, 2.4f, false);                         // tan step
+    addBox({-2,65.3f,72},{2,66,76}, S_WOOD);                   // L4 launch lip
+    addCoin(3, 61.3f, 68); addCoin(0, 67.3f, 74);
+    // the spore geyser: a dead stalk venting lift - catch it under sail
+    addUpdraft({0, 46, 94}, 7.0f, 30.0f, 20.0f);
+    addDecor(D_CYL, {0, 0, 94}, {3.4f, 42.0f, 3.4f}, BONE_D, TX_FIBER);   // the venting stump
+    addDecor(D_CYL, {0, 41.6f, 94}, {3.9f, 0.6f, 3.9f}, BONE, TX_FIBER);
+    addCoin(0, 58, 94); addCoin(0, 68, 94);
+    // T4: the landing bough
+    addCyl({0,54.4f,118}, 3.0f, 1.6f, S_WOOD);
+    addDecor(D_CYL, {0,55.7f,118}, {3.2f, 0.4f, 3.2f}, (Color){150,102,52,255}, TX_WOOD);
+    addCoin(0, 57.3f, 118);
+
+    // ---- act 5: THE EMBER SHELVES (56 -> 84.5, spore turbo only) -----------
+    addSpore(0, 57.4f, 118);
+    addCap( 6, 126, 65.5f, 2.2f, false);
+    addCap( 0, 134, 75.0f, 2.2f, false);
+    addSpore(0, 76.4f, 134);                                   // mid-chain re-light
+    addCap(-6, 142, 84.5f, 2.4f, false);
+    addCoin(6, 66.8f, 126); addCoin(0, 76.3f, 134); addCoin(-6, 85.8f, 142);
+
+    // ---- act 6: THE HOLLOW BONE (84 -> 124 -> the crown) -------------------
+    addBox({-2,83.3f,146},{2,84,150}, S_WOOD);                 // F0 approach lip
+    addBox({-4.25f,84,152},{-2.25f,124,162}, S_WOOD);          // the tallest chimney
+    addBox({ 2.25f,84,152},{ 4.25f,124,162}, S_WOOD);
+    addCoin(0, 95, 157); addCoin(0, 105, 157); addCoin(0, 115, 157); addCoin(0, 122.5f, 157);
+    for (int k=0;k<4;k++){
+        addDecor(D_CUBE, {-3.25f, 90.0f+k*9.0f, 157}, {2.3f, 0.5f, 10.4f}, (Color){118,78,42,255}, TX_WOOD);
+        addDecor(D_CUBE, { 3.25f, 94.5f+k*9.0f, 157}, {2.3f, 0.5f, 10.4f}, (Color){118,78,42,255}, TX_WOOD);
+    }
+    addBox({6,125.3f,155},{10,126,159}, S_WOOD);               // C: the last perch
+    addCoin(8, 127.3f, 157);
+    // the crown: a lone red cap on the tallest snapped bone - bounce through
+    addCyl({8,0,168}, 2.0f, 126, S_DARK, false, false);
+    addDecor(D_CYL, {8,0,168}, {2.2f, 126.2f, 2.2f}, BONE, TX_FIBER);
+    addCap(8, 168, 128.0f, 2.8f, true);
+    addCoin(8, 130.4f, 168);
+
+    // ---- scenery: the grove of dead giants ---------------------------------
+    // a petrified titan: bleached leaning stalk + cracked grey cap + gill ring
+    auto titan = [&](float x, float z, float h, float r, float lean){
+        GrpScope _g;
+        addDecor(D_CYL, {x, 0, z}, {r, h, r}, BONE, TX_FIBER);
+        addDecor(D_CYL, {x, 0, z}, {r*1.35f, h*0.12f, r*1.35f}, BONE_D, TX_FIBER);
+        Vector3 c = {x+lean, h+r*0.35f, z};
+        addDecor(D_SPHERE, {c.x, c.y-r*0.30f, c.z}, {r*2.9f, r*0.85f, r*2.9f}, (Color){188,180,162,255}, TX_STREAK);
+        addDecor(D_SPHERE, c, {r*2.3f, r*1.15f, r*2.3f}, (Color){206,198,180,255}, TX_STREAK);
+        addDecor(D_CYL, {c.x, c.y-r*0.62f, c.z}, {r*2.1f, r*0.16f, r*2.1f}, (Color){150,140,124,255});
+        for (int k=0;k<5;k++){                                 // shattered rim shards
+            float a = k*1.257f + x;
+            addDecor(D_CONE, {c.x+cosf(a)*r*2.5f, c.y-r*0.2f, c.z+sinf(a)*r*2.5f},
+                     {r*0.35f, r*0.9f, r*0.35f}, BONE_D, TX_FIBER);
+        }
+    };
+    titan(-52,  40, 46, 6.5f,  3.0f);
+    titan( 55,  90, 62, 8.0f, -4.0f);
+    titan(-48, 140, 38, 5.0f,  2.0f);
+    titan( 60, 190, 70, 9.0f, -3.0f);
+    titan(-58, 220, 52, 7.0f,  4.0f);
+    // the fallen one: a colossal log the road follows (decor mound)
+    addDecor(D_SPHERE, {-24, 2.0f, 92}, {9.0f, 4.2f, 34.0f}, (Color){222,214,196,255}, TX_FIBER);
+    addDecor(D_SPHERE, {-24, 3.0f, 74}, {6.5f, 5.5f, 7.5f},  BONE_D, TX_FIBER);
+    // teal grave-lights along the route bases (pure glow decor)
+    {
+        float gx[8] = {-3, 4,  -8,  3, -4,  4, -3, 10};
+        float gz[8] = { 3, 5,  30, 44, 55, 94, 148, 166};
+        for (int i=0;i<8;i++){
+            addDecor(D_CYL, {gx[i], 0, gz[i]}, {0.14f, 0.9f, 0.14f}, (Color){186,200,190,255}, TX_FIBER);
+            addDecor(D_SPHERE, {gx[i], 1.05f, gz[i]}, {0.5f, 0.36f, 0.5f}, GLOW);
+            addDecor(D_SPHERE, {gx[i], 1.05f, gz[i]}, {0.9f, 0.6f, 0.9f}, (Color){120,235,215,60});
+        }
+    }
+    // spirit motes drifting the whole climb (cool, not warm - this is a grave)
+    addMote({ 0, 12,  9}, {150,240,225,255}, 2.6f, 0.5f);
+    addMote({ 0, 40, 30}, {190,225,255,255}, 3.2f, 0.45f);
+    addMote({ 0, 48, 76}, {150,240,225,255}, 3.0f, 0.55f);
+    addMote({ 0, 70, 118}, {190,225,255,255}, 3.4f, 0.5f);
+    addMote({ 0, 105, 157}, {150,240,225,255}, 2.8f, 0.6f);
+    addMote({ 8, 126, 168}, {255,240,180,255}, 3.0f, 0.65f);
+    // pale bone-button families in the grass
+    addShroomPatch(-16, 0, 12, 6, 3.2f);
+    addShroomPatch( 20, 0, 40, 5, 2.8f);
+    addShroomPatch(-30, 0, 60, 6, 3.6f);
+    // mist banks pooling between the titans
+    for (int k=0;k<7;k++){
+        float a = k*0.9f;
+        addDecor(D_SPHERE, {sinf(a)*44, 1.4f, 60+cosf(a)*52+60},
+                 {frnd(9,15), frnd(1.6f,2.6f), frnd(9,15)}, (Color){222,232,236,90});
+    }
+    // grey-green burial hills on the horizon
+    for (int i=0;i<9;i++){
+        float ang = -0.6f + i*0.35f;
+        float d = frnd(300,380);
+        addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
+                 {frnd(60,130), frnd(48,104), frnd(60,130)}, {96,138,104,255});
+    }
+}
+
 // ------------------------------------------------------------ dispatcher --
 // LEVEL EDITOR: if levels/levelN.txt exists (saved from the F4 editor), it
 // REPLACES the code builder for that level. Delete the file to get the code
@@ -1266,5 +1429,6 @@ static void BuildWorld(int level = 0, bool forceCode = false){
     else if (level == 2) BuildSporeway();
     else if (level == 3) BuildGorge();
     else if (level == 4) BuildSkyhaven();
+    else if (level == 5) BuildBonewood();
     else                 BuildCastle();
 }

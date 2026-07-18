@@ -61,6 +61,11 @@ static Tun gTun[] = {
     {"SAIL_STEER",  &SAIL_STEER,   2,  80, 1.0f, "A/D authority under sail"},
     {"SAIL_DIVE",   &SAIL_DIVE,    2,  80, 1.0f, "W-tuck forward acceleration"},
     {"SAIL_WINDK",  &SAIL_WINDK,   0,   4, 0.1f, "how hard ambient wind pushes the sail"},
+    // -------- the wallspring --------
+    {"WALL_VY",     &WALL_VY,      4,  30, 0.5f, "base vertical kick off a wall"},
+    {"WALL_OUT",    &WALL_OUT,     2,  20, 0.5f, "push away from the wall"},
+    {"WALL_CONV",   &WALL_CONV,    0,   1, 0.02f,"fall speed converted into spring"},
+    {"WALL_GRACE",  &WALL_GRACE,0.05f,0.6f,0.01f,"press window after touching the wall"},
     // -------- game feel --------
     {"HITSTOP_VAULT",  &HITSTOP_VAULT,  0, 0.3f, 0.01f, "impact-frame slow-mo on plant"},
     {"HITSTOP_PERFECT",&HITSTOP_PERFECT,0, 0.4f, 0.01f, "impact-frame slow-mo on PERFECT"},

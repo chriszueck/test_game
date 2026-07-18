@@ -58,6 +58,13 @@ static float SLAM_K_PERF = 1.15f;   // slammed at the last blink
 static float SLAM_STUN   = 0.35f;   // slamming solid rock hurts
 static float HITSTOP_VAULT   = 0.05f;  // impact-frame slow-mo on plant
 static float HITSTOP_PERFECT = 0.11f;
+// THE WALLSPRING (Bonewood): tap the vault key mid-air against a wall and the
+// pole kicks you off it. Falling faster when you spring = a bigger spring, so
+// a chain up a chimney is a rhythm, not a mash.
+static float WALL_VY    = 13.0f;   // base vertical kick
+static float WALL_OUT   = 7.0f;    // push away from the wall
+static float WALL_CONV  = 0.35f;   // fall speed converted into extra kick
+static float WALL_GRACE = 0.16f;   // press window after touching the wall
 
 static const Vector3 SPAWN_POS = { 0.0f, 0.91f, -8.0f };
 static const Vector3 STAR_POS  = { 0.0f, 94.2f, 136.0f };  // the goal: bounce-height only
@@ -103,6 +110,7 @@ struct Decor {
 
 // autopilot flags for the --demo verification mode (OR'd into real input)
 static bool gBotHold = false, gBotFwd = false, gBotWeb = false, gBotSlam = false, gBotSail = false;
+static bool gBotKick = false;
 
 // web swing: how far a web bloom can be grabbed from
 static float WEB_RANGE = 15.0f;
@@ -129,7 +137,8 @@ static float SPORE_CD    = 5.0f;     // regrow time after pickup
 static bool gUnlockWeb  = false;           // won at the Weaver's Bloom (Megashroom)
 static bool gUnlockSlam = false;           // won at the Thunder Shrine (Gorge)
 static bool gUnlockSail = false;           // SKYHAVEN: hold SHIFT to hang-glide
-struct Shrine { Vector3 p; int type; int grp; };  // type 0 = web, 1 = slam, 2 = sail
+static bool gUnlockWall = false;           // BONEWOOD: won at the Springheart shrine
+struct Shrine { Vector3 p; int type; int grp; };  // type 0 = web, 1 = slam, 3 = wallspring
 static std::vector<Shrine> gShrines;
 
 // SKYHAVEN wind kingdom: updraft columns, windmills, banners, ambient wind
@@ -173,6 +182,7 @@ void FX_Bump(Vector3 pos, int surf);
 void FX_QCoin(Vector3 blockTop);
 void FX_Slam();
 void FX_SlamHit(Vector3 pos, bool perfect, float outVel);
+void FX_WallSpring(Vector3 pos, float power);
 void FX_BigFall(float meters);
 void FX_Win();
 void SpawnDust(Vector3 pos, int n, Color col);

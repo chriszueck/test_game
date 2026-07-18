@@ -36,6 +36,10 @@ struct Player {
     bool  sailing = false;
     float sailOpen = 0, sailTilt = 0;      // 0..1 deploy, -1..1 dive/flare
     bool  inUpdraft = false;
+    // wallspring (Bonewood): recent wall contact + buffered press
+    float wallT = 0;                       // grace window since last wall touch
+    Vector3 wallN = {0,0,0};               // normal of that wall (points away)
+    float kickBuf = 0;                     // press buffered before the touch
     // progress
     float apexY = 0; bool wasGrounded = true;
     float stepT = 0; int stepAlt = 0;
@@ -89,6 +93,11 @@ static void moveHoriz(int axis, float d){            // axis 0=x, 2=z (boxes onl
         float smx = (axis==0)? s.mx.x : s.mx.z;
         *pc = (d > 0)? smn - PLAYER_R - 0.001f : smx + PLAYER_R + 0.001f;
         *vc = 0;
+        if (!pl.grounded){                       // airborne wall contact: springable
+            pl.wallT = WALL_GRACE;
+            pl.wallN = (axis==0)? (Vector3){ (d>0)? -1.0f : 1.0f, 0, 0 }
+                                : (Vector3){ 0, 0, (d>0)? -1.0f : 1.0f };
+        }
     }
 }
 static void resolveCylsRadial(void){
@@ -112,6 +121,7 @@ static void resolveCylsRadial(void){
         pl.pos.z = s.base.z + oz*(minD + 0.001f);
         float vd = pl.vel.x*ox + pl.vel.z*oz;
         if (vd < 0){ pl.vel.x -= ox*vd; pl.vel.z -= oz*vd; }
+        if (!pl.grounded){ pl.wallT = WALL_GRACE; pl.wallN = {ox, 0, oz}; }
     }
 }
 static float gLandImpact = 0;                 // set during Y-resolve, consumed after
@@ -396,6 +406,32 @@ static void PlayerUpdate(float dt, bool inputLocked){
         float aa = AIR_ACC*(pl.slamming? 0.5f : 1.0f);   // a dive barely steers
         pl.vel.x += wish.x*aa*dt;
         pl.vel.z += wish.z*aa*dt;
+    }
+    // ---- WALLSPRING: tap the vault key against a wall mid-air and kick off it.
+    // Falling speed converts into spring height - late, falling springs go BIG.
+    pl.wallT   = fmaxf(0.0f, pl.wallT - dt);
+    pl.kickBuf = fmaxf(0.0f, pl.kickBuf - dt);
+    if (gUnlockWall && !pl.grounded && !pl.webSwinging && !pl.sailing
+        && !pl.slamming && pl.stunT <= 0){
+        bool kp = (!inputLocked && (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)
+                                    || IsKeyPressed(KEY_SPACE))) || gBotKick;
+        if (kp) pl.kickBuf = 0.12f;
+        if (pl.kickBuf > 0 && pl.wallT > 0){
+            float fall = fmaxf(0.0f, -pl.vel.y);
+            Vector3 n = pl.wallN;
+            float vn = pl.vel.x*n.x + pl.vel.z*n.z;          // strip the into-wall part,
+            pl.vel.x = (pl.vel.x - n.x*vn)*0.55f + n.x*WALL_OUT;   // keep some slide
+            pl.vel.z = (pl.vel.z - n.z*vn)*0.55f + n.z*WALL_OUT;
+            pl.vel.y = WALL_VY + WALL_CONV*fall;
+            pl.wallT = 0; pl.kickBuf = 0;
+            pl.charging = false; pl.pendT = 0;
+            pl.vaultCD = 0.25f;                              // that press was not a charge
+            pl.poleHideT = 0.40f;                            // arms fling off the wall
+            pl.fovKick += 3.5f + 0.12f*fall;
+            pl.rollT = 0.55f;                                // a lick of roll, not a full tumble
+            gHitstop = fmaxf(gHitstop, 0.03f);
+            FX_WallSpring(pl.pos - n*0.5f, fall);
+        }
     }
     // ---- vault charge
     bool hold = !inputLocked && pl.stunT <= 0 && !pl.sailing
