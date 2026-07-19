@@ -77,10 +77,11 @@ static void addSnare(std::vector<float>& b, float t0, float amp=0.16f){
 }
 
 // ------------------------------------------------------- zone music --------
-// three 16 s loops baked at startup, crossfaded by altitude:
-//   [0] meadow stroll   [1] castle march   [2] sky drift
-static Sound gMusic[3];
-static float gMusVol[3] = {0,0,0};
+// five 16 s loops baked at startup, crossfaded by altitude:
+//   [0] meadow stroll  [1] castle march  [2] sky drift
+//   [3] canyon thunder (the mesa)        [4] twilight grove (the Bonewood)
+static Sound gMusic[5];
+static float gMusVol[5] = {0,0,0,0,0};
 static float gMusT = 0; static bool gMusOn = false;
 static const float MUSIC_LEN = 16.0f;          // 32 beats at 120 bpm
 
@@ -129,10 +130,39 @@ static void BakeMusic(void){
       int pads[4] = {53, 48, 50, 52};
       for (int i=0;i<4;i++) addTone(b, i*8*B, 3.6f, mfreq(pads[i]-12), 0.09f, 0.08f, 0.5f);
       gMusic[2]=bakeSound(b); }
+    { // CANYON: slow thunder - deep toms, an open-fifth drone, desert pentatonic
+      auto b=mkbuf(MUSIC_LEN);
+      int dro[4] = {45, 45, 43, 41};
+      for (int i=0;i<4;i++){
+          addTone(b, i*8*B, 3.8f, mfreq(dro[i]-24), 0.16f, 0.12f, 0.4f);
+          addTone(b, i*8*B, 3.8f, mfreq(dro[i]-17), 0.10f, 0.10f, 0.5f);   // bare fifth above
+      }
+      int rif[32] = {69,0,72,0, 74,0,76,0,  74,72,0,69, 0,0,0,0,
+                     69,0,72,0, 76,0,79,0,  76,0,74,72, 0,0,69,0};
+      for (int i=0;i<32;i++) if (rif[i]) addTone(b, i*B, 0.5f, mfreq(rif[i]), 0.10f, 0.3f);
+      for (int i=0;i<32;i++){
+          if (i%4==0) addKick(b, i*B, 0.30f);
+          if (i%8==6) addKick(b, i*B, 0.20f);
+          if (i%8==7) addSnare(b, i*B, 0.08f);
+      }
+      gMusic[3]=bakeSound(b); }
+    { // TWILIGHT GROVE: a music box among the graves - sparse, minor, no drums
+      auto b=mkbuf(MUSIC_LEN);
+      int arp[32] = {81,0,84,0, 88,0,84,0,  81,0,86,0, 84,0,81,0,
+                     79,0,84,0, 88,0,91,0,  88,0,86,0, 84,0,0,0};
+      for (int i=0;i<32;i++) if (arp[i]) addTone(b, i*B, 0.9f, mfreq(arp[i]), 0.075f, 0.55f, 0.004f);
+      int pads[4] = {45, 41, 43, 45};
+      for (int i=0;i<4;i++){
+          addTone(b, i*8*B, 4.2f, mfreq(pads[i]-12), 0.075f, 0.06f, 0.8f);
+          addTone(b, i*8*B+2*B, 3.6f, mfreq(pads[i]), 0.05f, 0.06f, 0.8f);
+      }
+      addTone(b, 14*B, 2.2f, mfreq(57), 0.09f, 0.08f, 0.02f);   // a far bell, twice a loop
+      addTone(b, 30*B, 2.2f, mfreq(52), 0.09f, 0.08f, 0.02f);
+      gMusic[4]=bakeSound(b); }
 }
 static void StartMusic(void){
     if (!gAudioOK) return;
-    for (int i=0;i<3;i++){ SetSoundVolume(gMusic[i], 0); PlaySound(gMusic[i]); }
+    for (int i=0;i<5;i++){ SetSoundVolume(gMusic[i], 0); PlaySound(gMusic[i]); }
     gMusOn = true; gMusT = 0;
 }
 static void UpdateMusic(float dt, float alt, bool won){
@@ -140,10 +170,16 @@ static void UpdateMusic(float dt, float alt, bool won){
     gMusT += dt;
     if (gMusT >= MUSIC_LEN){                    // seamless-enough loop, phase-locked
         gMusT -= MUSIC_LEN;
-        for (int i=0;i<3;i++) PlaySound(gMusic[i]);
+        for (int i=0;i<5;i++) PlaySound(gMusic[i]);
     }
-    int zone = (alt < 14.0f)? 0 : (alt < 45.0f)? 1 : 2;
-    for (int i=0;i<3;i++){
+    int zone;
+    if (gLevel == 6)        // THE ASCENT: the score climbs with you
+        zone = (alt < 14)? 0 : (alt < 88)? 1 : (alt < 302)? 2 : (alt < 388)? 3
+             : (alt < 542)? 2 : 4;
+    else if (gLevel == 3) zone = (alt < 6)? 0 : 3;
+    else if (gLevel == 5) zone = 4;
+    else zone = (alt < 14.0f)? 0 : (alt < 45.0f)? 1 : 2;
+    for (int i=0;i<5;i++){
         float tgt = gMuted? 0.0f : won? (i==2? 0.20f : 0.0f) : (i==zone? 0.45f : 0.0f);
         tgt *= gMusicDuck;                            // the world holds its breath as you fall
         gMusVol[i] += (tgt - gMusVol[i])*fminf(1.0f, dt*1.5f);

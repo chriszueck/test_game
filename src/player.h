@@ -82,6 +82,7 @@ static void moveHoriz(int axis, float d){            // axis 0=x, 2=z (boxes onl
     *pc += d;
     for (const Solid& s : solids){
         if (s.isCyl) continue;
+        if (s.mn.y > pl.pos.y + 3.0f || s.mx.y < pl.pos.y - 3.0f) continue;   // far off our band
         Vector3 mn = {pl.pos.x-PLAYER_R, pl.pos.y-PLAYER_HH, pl.pos.z-PLAYER_R};
         Vector3 mx = {pl.pos.x+PLAYER_R, pl.pos.y+PLAYER_HH, pl.pos.z+PLAYER_R};
         if (!aabbOverlap(mn,mx,s)) continue;
@@ -105,6 +106,7 @@ static void resolveCylsRadial(void){
     float feet = pl.pos.y - PLAYER_HH, head = pl.pos.y + PLAYER_HH;
     for (const Solid& s : solids){
         if (!s.isCyl) continue;
+        if (s.mn.y > head + 2.0f || s.mx.y < feet - 2.0f) continue;
         float top = s.base.y + s.hgt;
         if (feet >= top - 0.01f || head <= s.base.y + 0.01f) continue;
         // falling onto the rim is a LANDING for moveVert, not a side hit -
@@ -131,6 +133,7 @@ static void moveVert(float d){
     pl.pos.y += d;
     float feet = pl.pos.y - PLAYER_HH, head = pl.pos.y + PLAYER_HH;
     for (Solid& s : solids){
+        if (s.mn.y > head + 2.0f || s.mx.y < feet - 2.0f) continue;   // far off our band
         // horizontal overlap?
         if (s.isCyl){
             float dx = pl.pos.x - s.base.x, dz = pl.pos.z - s.base.z;
@@ -194,6 +197,7 @@ static void moveVert(float d){
 static bool supportScan(void){
     float feet = pl.pos.y - PLAYER_HH;
     for (const Solid& s : solids){
+        if (s.mn.y > feet + 1.0f || s.mx.y < feet - 1.0f) continue;
         float sTop = s.isCyl? s.base.y + s.hgt : s.mx.y;
         if (feet - sTop > 0.08f || sTop - feet > 0.05f) continue;
         if (s.isCyl){
@@ -610,8 +614,8 @@ static void PlayerUpdate(float dt, bool inputLocked){
         if (pl.stepT > 2.7f){ pl.stepT = 0; pl.stepAlt ^= 1; SND(sStep, pl.stepAlt? 1.07f:0.93f, 0.5f); }
     } else pl.stepT = 1.8f;
     // ---- world bounds / failsafe
-    pl.pos.x = clampf(pl.pos.x, -215, 215);
-    pl.pos.z = clampf(pl.pos.z, -75, 275);
+    pl.pos.x = clampf(pl.pos.x, -gBndX, gBndX);
+    pl.pos.z = clampf(pl.pos.z, gBndZ0, gBndZ1);
     if (pl.pos.y < -25){ pl.pos = gSpawn; pl.vel = {0,0,0}; }
 }
 

@@ -18,8 +18,7 @@
 static void drawTextC(const char* s, int cx, int y, int size, Color c);   // main.cpp
 static void drawTextSh(const char* s, int x, int y, int size, Color c);   // main.cpp
 
-static bool gEditMode  = false;
-static bool gEditDirty = false;
+static bool gEditDirty = false;    // (gEditMode itself lives in gfx.h - the bake needs it)
 enum ESelKind { ESEL_NONE, ESEL_GRP, ESEL_SPAWN, ESEL_STAR };
 static int  gESelKind = ESEL_NONE;
 static int  gESelGrp  = -1;

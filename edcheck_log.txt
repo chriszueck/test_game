@@ -1,10 +1,22 @@
-level 0: counts OK  file-roundtrip OK  (149 solids 865 decor 58 coins)
-level 1: counts OK  file-roundtrip OK  (77 solids 1014 decor 29 coins)
-level 2: counts OK  file-roundtrip OK  (30 solids 473 decor 15 coins)
-level 3: counts OK  file-roundtrip OK  (89 solids 520 decor 26 coins)
+level 0: counts OK  file-roundtrip OK  (149 solids 868 decor 58 coins)
+level 1: counts OK  file-roundtrip OK  (77 solids 1015 decor 29 coins)
+level 2: counts OK  file-roundtrip OK  (30 solids 472 decor 15 coins)
+level 3: counts OK  file-roundtrip OK  (89 solids 517 decor 26 coins)
 level 4: counts OK  file-roundtrip OK  (21 solids 93 decor 16 coins)
-level 5: counts OK  file-roundtrip OK  (25 solids 292 decor 24 coins)
+level 5: counts OK  file-roundtrip OK  (25 solids 291 decor 24 coins)
+level 6: counts OK  file-roundtrip OK  (373 solids 3549 decor 183 coins)
 editor ops: pick OK  move OK  scale OK  dup OK  del OK
 file-override OK  code-fallback OK
+ascent seam seam1-cloud  ground 82.00 expect 82.00  OK
+ascent seam crag-cap     ground 80.00 expect 80.00  OK
+ascent seam shelf-1      ground 85.00 expect 85.00  OK
+ascent seam crown-mound  ground 228.00 expect 228.00  OK
+ascent seam mesa-hop     ground 304.00 expect 304.00  OK
+ascent seam mesa-mouth   ground 310.00 expect 310.00  OK
+ascent seam skyhaven-P0  ground 387.00 expect 387.00  OK
+ascent seam bone-rim     ground 540.00 expect 540.00  OK
+ascent seam star-cap     ground 668.00 expect 668.00  OK
+ascent: 373 solids 3559 decor 183 coins 4 shrines 14 updrafts
+ascent counts OK
 mechanics round-trip OK
 RESULT PASS

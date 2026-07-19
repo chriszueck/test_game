@@ -43,9 +43,36 @@ static Shader  gToon;
 static int     gLocSun, gLocCam, gLocFogC, gLocFogD;
 static Texture gTex[TX_COUNT];
 static Model   gCube, gCyl, gSphere, gCone, gPlane;
+// static-decor bake state (see BakeWorldDecor below)
+struct BakedChunk { Mesh mesh; int tex; Vector3 c; float rad; };
+static std::vector<BakedChunk> gBaked;
+static Material gBakeMat;
+static bool gEditMode = false;                // toggled in editor.h (same TU)
 
-static const Color SKY_TOP = {  92, 148, 252, 255 };
-static const Color SKY_FOG = { 178, 214, 255, 255 };
+// altitude-graded sky: day at the meadow, thin and pale by the island band,
+// peach dusk at the mesa rim, deep star-pricked twilight in the Bonewood.
+// RenderAll samples these by camera height every frame; fog follows.
+static Color gSkyTop = {  92, 148, 252, 255 };
+static Color gSkyFog = { 178, 214, 255, 255 };
+static Color lerpC(Color a, Color b, float t){
+    return { (unsigned char)lerpf(a.r,b.r,t), (unsigned char)lerpf(a.g,b.g,t),
+             (unsigned char)lerpf(a.b,b.b,t), 255 };
+}
+static void SkyAt(float y){
+    struct K { float y; Color top, fog; };
+    static const K ks[5] = {
+        {   0, { 92,148,252,255}, {178,214,255,255} },   // meadow day
+        { 270, {118,168,250,255}, {204,226,252,255} },   // the island band: thinner air
+        { 440, {154,134,212,255}, {244,190,168,255} },   // mesa rim: peach dusk
+        { 565, { 76, 66,150,255}, {160,124,166,255} },   // violet hour
+        { 665, { 34, 32, 90,255}, {104, 90,144,255} },   // the Bonewood: deep twilight
+    };
+    int i = 0;
+    while (i < 3 && y > ks[i+1].y) i++;
+    float t = clampf((y - ks[i].y)/(ks[i+1].y - ks[i].y), 0, 1);
+    gSkyTop = lerpC(ks[i].top, ks[i+1].top, t);
+    gSkyFog = lerpC(ks[i].fog, ks[i+1].fog, t);
+}
 
 // -------------------------------------------------------------- textures ---
 static Texture makeTex(Image img, bool mips){
@@ -195,11 +222,11 @@ static void LoadGfx(void){
     gLocFogD = GetShaderLocation(gToon, "fogDensity");
     Vector3 sun = Vector3Normalize((Vector3){-0.45f,-1.0f,-0.35f});
     SetShaderValue(gToon, gLocSun, &sun, SHADER_UNIFORM_VEC3);
-    float fogc[3] = { SKY_FOG.r/255.0f, SKY_FOG.g/255.0f, SKY_FOG.b/255.0f };
-    SetShaderValue(gToon, gLocFogC, fogc, SHADER_UNIFORM_VEC3);
-    float fogd = 0.0026f;
+    float fogd = 0.0022f;                          // the tower must read from the meadow
     SetShaderValue(gToon, gLocFogD, &fogd, SHADER_UNIFORM_FLOAT);
     LoadTextures();
+    gBakeMat = LoadMaterialDefault();
+    gBakeMat.shader = gToon;
     gCube   = makeModel(GenMeshCube(1,1,1));
     gCyl    = makeModel(GenMeshCylinder(1,1,28));
     gSphere = makeModel(GenMeshSphere(1,14,22));
@@ -208,6 +235,9 @@ static void LoadGfx(void){
 }
 static void GfxFrame(Vector3 camPos){
     SetShaderValue(gToon, gLocCam, &camPos, SHADER_UNIFORM_VEC3);
+    SkyAt(camPos.y);                              // the sky climbs with you
+    float fogc[3] = { gSkyFog.r/255.0f, gSkyFog.g/255.0f, gSkyFog.b/255.0f };
+    SetShaderValue(gToon, gLocFogC, fogc, SHADER_UNIFORM_VEC3);
 }
 
 // one generic toon draw: model, position, scale, single-axis rotation, tex+tint
@@ -338,44 +368,183 @@ static void DrawWebAnchors(Vector3 camPos){
                          (Color){255,80,80,(unsigned char)(90*(gUnlockT-2.5f)/2.0f)});
     }
 }
-static void DrawWorld3D(Vector3 camPos){
+// ---- static-decor baking -------------------------------------------------
+// The ascent carries ~4000 decor items; per-item DrawModelEx is ~3000 draw
+// calls and the frame dies. Everything opaque and non-landmark gets baked
+// into merged meshes (bucketed by 90 m height band + primitive + texture) and
+// drawn in a handful of DrawMesh calls. Alpha decor, landmarks (big >= 40)
+// and everything during editor mode stay on the per-item path.
+static bool BakeSkip(const Decor& d){         // stays on the dynamic path?
+    float big = fmaxf(d.scale.x, fmaxf(d.scale.y, d.scale.z));
+    return d.col.a < 255 || big >= 40.0f;
+}
+static void FreeBaked(void){
+    for (auto& b : gBaked) UnloadMesh(b.mesh);
+    gBaked.clear();
+}
+static void BakeWorldDecor(void){
+    FreeBaked();
+    // CPU-side templates. NOTE: raylib de-indexes par_shapes meshes, so the
+    // sphere/cyl/cone have indices == NULL (triangle soup); only the cube is
+    // indexed. The bake emits soup uniformly and handles both.
+    Mesh tm[4] = {};
+    tm[D_SPHERE] = GenMeshSphere(1, 8, 12);    // blobs; cel shading hides the budget
+    tm[D_CUBE]   = GenMeshCube(1,1,1);
+    tm[D_CYL]    = GenMeshCylinder(1,1,14);
+    tm[D_CONE]   = GenMeshCone(1,1,14);
+    int tvc[4];                                 // soup verts per template
+    for (int k=0;k<4;k++) tvc[k] = tm[k].triangleCount*3;
+    // bucket items by (yband, kind, tex)
+    struct Key { int band, kind, tex; };
+    std::vector<std::vector<int>> groups;
+    std::vector<Key> keys;
+    for (int i=0;i<(int)decor.size();i++){
+        const Decor& d = decor[i];
+        if (BakeSkip(d)) continue;
+        Key k = { (int)floorf(d.pos.y/90.0f), d.kind, d.tex };
+        int g = -1;
+        for (int j=0;j<(int)keys.size();j++)
+            if (keys[j].band==k.band && keys[j].kind==k.kind && keys[j].tex==k.tex){ g=j; break; }
+        if (g < 0){ keys.push_back(k); groups.push_back({}); g = (int)keys.size()-1; }
+        groups[g].push_back(i);
+    }
+    for (int g=0; g<(int)groups.size(); g++){
+        const Mesh& src = tm[keys[g].kind];
+        int per = tvc[keys[g].kind];
+        size_t at = 0;
+        while (at < groups[g].size()){
+            int fit = (int)fminf((float)(groups[g].size()-at), fmaxf(1.0f, floorf(90000.0f/per)));
+            Mesh m{};
+            m.vertexCount   = fit*per;
+            m.triangleCount = fit*src.triangleCount;
+            m.vertices  = (float*)RL_MALLOC(m.vertexCount*3*sizeof(float));
+            m.normals   = (float*)RL_MALLOC(m.vertexCount*3*sizeof(float));
+            m.texcoords = (float*)RL_MALLOC(m.vertexCount*2*sizeof(float));
+            m.colors    = (unsigned char*)RL_MALLOC(m.vertexCount*4);
+            Vector3 mn = { 1e9f, 1e9f, 1e9f}, mx = {-1e9f,-1e9f,-1e9f};
+            for (int q=0; q<fit; q++){
+                const Decor& d = decor[groups[g][at+q]];
+                Matrix M = MatrixMultiply(MatrixMultiply(
+                               MatrixScale(d.scale.x, d.scale.y, d.scale.z),
+                               MatrixRotate((Vector3){0,1,0}, d.rotY*DEG2RAD)),
+                               MatrixTranslate(d.pos.x, d.pos.y, d.pos.z));
+                Matrix N = MatrixTranspose(MatrixInvert(M));
+                int v0 = q*per;
+                for (int j=0; j<per; j++){
+                    int sv = src.indices? src.indices[j] : j;
+                    Vector3 p = { src.vertices[sv*3], src.vertices[sv*3+1], src.vertices[sv*3+2] };
+                    p = Vector3Transform(p, M);
+                    m.vertices[(v0+j)*3] = p.x; m.vertices[(v0+j)*3+1] = p.y; m.vertices[(v0+j)*3+2] = p.z;
+                    Vector3 nr = { src.normals[sv*3], src.normals[sv*3+1], src.normals[sv*3+2] };
+                    nr = Vector3Normalize((Vector3){
+                        N.m0*nr.x + N.m4*nr.y + N.m8*nr.z,
+                        N.m1*nr.x + N.m5*nr.y + N.m9*nr.z,
+                        N.m2*nr.x + N.m6*nr.y + N.m10*nr.z });
+                    m.normals[(v0+j)*3] = nr.x; m.normals[(v0+j)*3+1] = nr.y; m.normals[(v0+j)*3+2] = nr.z;
+                    m.texcoords[(v0+j)*2] = src.texcoords[sv*2]; m.texcoords[(v0+j)*2+1] = src.texcoords[sv*2+1];
+                    m.colors[(v0+j)*4] = d.col.r; m.colors[(v0+j)*4+1] = d.col.g;
+                    m.colors[(v0+j)*4+2] = d.col.b; m.colors[(v0+j)*4+3] = 255;
+                    mn.x = fminf(mn.x, p.x); mn.y = fminf(mn.y, p.y); mn.z = fminf(mn.z, p.z);
+                    mx.x = fmaxf(mx.x, p.x); mx.y = fmaxf(mx.y, p.y); mx.z = fmaxf(mx.z, p.z);
+                }
+            }
+            UploadMesh(&m, false);
+            // GPU owns it now - drop the CPU copies (UnloadMesh handles NULLs)
+            RL_FREE(m.vertices);  m.vertices  = NULL;
+            RL_FREE(m.normals);   m.normals   = NULL;
+            RL_FREE(m.texcoords); m.texcoords = NULL;
+            RL_FREE(m.colors);    m.colors    = NULL;
+            gBaked.push_back({ m, keys[g].tex, (mn+mx)*0.5f, Vector3Length(mx-mn)*0.5f });
+            at += fit;
+        }
+    }
+    for (int k=0;k<4;k++) UnloadMesh(tm[k]);
+}
+
+static void DrawWorld3D(Vector3 camPos, Vector3 camFwd){
+    if (gBakeDirty && !gEditMode){ BakeWorldDecor(); gBakeDirty = false; }
+    // the ascent draws six worlds at once - cheap behind-the-camera rejection
+    // (angle > ~100 deg off-axis; fov is 74-90) carries most of the load
     for (size_t i=0;i<solids.size();i++){
         const Solid& s = solids[i];
         if (!s.visible) continue;
         Vector3 c = (s.mn+s.mx)*0.5f;
-        float d = Vector3Distance(c, camPos);
+        Vector3 to = c - camPos;
+        float d = Vector3Length(to);
         float big = Vector3Length(s.mx - s.mn);
         if (d > 320 && big < 60) continue;
+        if (big < 60 && d > 30 &&
+            to.x*camFwd.x + to.y*camFwd.y + to.z*camFwd.z < -0.2f*d) continue;
         DrawSolid(s, (int)i);
     }
+    if (!gEditMode)
+        for (auto& b : gBaked){
+            Vector3 to = b.c - camPos;
+            float d = Vector3Length(to);
+            if (d - b.rad > 430) continue;
+            if (d > b.rad*1.4f + 40 &&
+                to.x*camFwd.x + to.y*camFwd.y + to.z*camFwd.z < -0.25f*d) continue;
+            gBakeMat.maps[MATERIAL_MAP_DIFFUSE].texture = gTex[b.tex];
+            DrawMesh(b.mesh, gBakeMat, MatrixIdentity());
+        }
     for (const Decor& d : decor){
-        float dist = Vector3Distance(d.pos, camPos);
+        if (!gEditMode && !BakeSkip(d)) continue;        // already in a baked chunk
+        Vector3 to = d.pos - camPos;
+        float dist = Vector3Length(to);
         float big = fmaxf(d.scale.x, fmaxf(d.scale.y, d.scale.z));
         if (big < 1.0f && dist > 150) continue;
+        if (big < 6.0f && dist > 270) continue;
         if (dist > 420 && big < 40) continue;
+        if (big < 60 && dist > 30 &&
+            to.x*camFwd.x + to.y*camFwd.y + to.z*camFwd.z < -0.2f*dist) continue;
         DrawDecorItem(d);
     }
 }
 
 // --------------------------------------------------------- sky decoration --
-static struct { Vector3 p; float s, spd; } gSkyClouds[10];
+static struct { Vector3 p; float s, spd; } gSkyClouds[20];
+static Vector3 gStarDirs[110];                 // fixed star dome (unit directions)
 static void InitSky(void){
-    for (int i=0;i<10;i++){
-        gSkyClouds[i].p = { frnd(-260,260), frnd(45,150), frnd(-40,260) };
+    for (int i=0;i<20;i++){
+        gSkyClouds[i].p = { frnd(-260,340), frnd(40,640), frnd(-40,760) };
         gSkyClouds[i].s = frnd(6,14);
         gSkyClouds[i].spd = frnd(0.6f,1.8f);
     }
+    for (int i=0;i<110;i++){
+        float az = frnd(0, 6.283f), el = frnd(0.06f, 1.45f);
+        gStarDirs[i] = { cosf(az)*cosf(el), sinf(el), sinf(az)*cosf(el) };
+    }
 }
-static void DrawSkyBits(float t){
-    // sun (unlit, default shader - always bright)
-    DrawSphere((Vector3){170,210,-120}, 16, (Color){255,244,180,255});
-    DrawSphere((Vector3){170,210,-120}, 13, (Color){255,252,220,255});
+static void DrawSkyBits(float t, Vector3 camPos){
+    float y = camPos.y;
+    // the sun rules the lower sky, then sinks away into the dusk
+    float sunA = clampf(1.0f - (y-330.0f)/160.0f, 0.0f, 1.0f);
+    if (sunA > 0.01f){
+        DrawSphere((Vector3){170,210,-120}, 16, (Color){255,244,180,(unsigned char)(255*sunA)});
+        DrawSphere((Vector3){170,210,-120}, 13, (Color){255,252,220,(unsigned char)(255*sunA)});
+    }
+    // the moon owns the heights (camera-anchored: a true celestial)
+    float moonA = clampf((y-380.0f)/140.0f, 0.0f, 1.0f);
+    if (moonA > 0.01f){
+        Vector3 mp = camPos + (Vector3){-330, 240, 260};
+        DrawSphere(mp, 26, (Color){236,240,252,(unsigned char)(235*moonA)});
+        DrawSphere(mp + (Vector3){9,7,-6}, 23, (Color){178,182,214,(unsigned char)(200*moonA)});   // the shadowed cheek
+    }
+    // stars prick through as the blue thins; they breathe a little
+    float starA = clampf((y-400.0f)/170.0f, 0.0f, 1.0f);
+    if (starA > 0.01f)
+        for (int i=0;i<110;i++){
+            float tw = 0.65f + 0.35f*sinf(t*1.7f + i*2.09f);
+            DrawSphereEx(camPos + gStarDirs[i]*760.0f, 1.5f + 0.6f*tw, 4, 6,
+                         (Color){255,255,244,(unsigned char)(215*starA*tw)});
+        }
     for (auto& c : gSkyClouds){
         c.p.x += c.spd * GetFrameTime();
-        if (c.p.x > 300) c.p.x = -300;
-        DrawSphere(c.p, c.s*0.5f, WHITE);
-        DrawSphere((Vector3){c.p.x-c.s*0.35f, c.p.y-c.s*0.06f, c.p.z+c.s*0.1f}, c.s*0.34f, WHITE);
-        DrawSphere((Vector3){c.p.x+c.s*0.36f, c.p.y-c.s*0.05f, c.p.z-c.s*0.1f}, c.s*0.36f, WHITE);
+        if (c.p.x > 360) c.p.x = -360;
+        Color cc = (c.p.y > 500)? (Color){224,212,238,255} : WHITE;   // twilight-lit up high
+        DrawSphereEx(c.p, c.s*0.5f, 7, 10, cc);
+        DrawSphereEx((Vector3){c.p.x-c.s*0.35f, c.p.y-c.s*0.06f, c.p.z+c.s*0.1f}, c.s*0.34f, 7, 10, cc);
+        DrawSphereEx((Vector3){c.p.x+c.s*0.36f, c.p.y-c.s*0.05f, c.p.z-c.s*0.1f}, c.s*0.36f, 7, 10, cc);
     }
 }
 

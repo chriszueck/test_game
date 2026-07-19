@@ -1,0 +1,7 @@
+meadow-up          6.92 ms/frame  ( 145 fps)
+hanging-meadow     7.22 ms/frame  ( 138 fps)
+star-isle          7.49 ms/frame  ( 134 fps)
+mesa-mouth         7.22 ms/frame  ( 139 fps)
+P0-terraces        8.25 ms/frame  ( 121 fps)
+canyon-mid         8.48 ms/frame  ( 118 fps)
+crown-down         7.31 ms/frame  ( 137 fps)

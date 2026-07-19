@@ -81,6 +81,8 @@ static std::vector<CoinPop> gCoinPops;
 static void DrawCoins(float t){
     for (auto& c : gCoins){
         if (c.taken) continue;
+        float cdx = c.p.x-pl.pos.x, cdy = c.p.y-pl.pos.y, cdz = c.p.z-pl.pos.z;
+        if (cdx*cdx + cdy*cdy + cdz*cdz > 230*230) continue;
         float by = c.p.y + sinf(t*2.4f + c.p.x*0.7f + c.p.z*0.3f)*0.12f;
         float spin = t*160.0f + c.p.x*31 + c.p.z*17;
         drawM(gSphere, {c.p.x,by,c.p.z}, {0.40f,0.46f,0.11f}, C_GOLD, TX_WHITE, {0,1,0}, spin);
@@ -172,7 +174,8 @@ static Vector3 gUnlockCinePos = {0,0,0};
 static void UpdateShrines(void){
     if (gUnlockCine > 0) return;   // one at a time
     for (auto& sh : gShrines){
-        bool owned = (sh.type == 0)? gUnlockWeb : (sh.type == 3)? gUnlockWall : gUnlockSlam;
+        bool owned = (sh.type == 0)? gUnlockWeb : (sh.type == 3)? gUnlockWall
+                   : (sh.type == 2)? gUnlockSail : gUnlockSlam;
         if (owned) continue;
         float dx = pl.pos.x-sh.p.x, dy = pl.pos.y-sh.p.y, dz = pl.pos.z-sh.p.z;
         if (dx*dx+dz*dz < 2.6f*2.6f && fabsf(dy) < 2.6f){
@@ -184,6 +187,10 @@ static void UpdateShrines(void){
                 gUnlockWall = true;
                 gUnlockName = "THE WALLSPRING";
                 gUnlockSub  = "tap LMB mid-air against a wall - fall in fast, spring out BIG";
+            } else if (sh.type == 2){
+                gUnlockSail = true;
+                gUnlockName = "THE SKYSAIL";
+                gUnlockSub  = "HOLD SHIFT mid-air to unfurl - ride the updrafts (a TAP still slams)";
             } else {
                 gUnlockSlam = true;
                 gUnlockName = "THE SLAM";
@@ -198,13 +205,17 @@ static void UpdateShrines(void){
 }
 static void DrawShrines(float t){
     for (auto& sh : gShrines){
-        bool owned  = (sh.type == 0)? gUnlockWeb : (sh.type == 3)? gUnlockWall : gUnlockSlam;
+        bool owned  = (sh.type == 0)? gUnlockWeb : (sh.type == 3)? gUnlockWall
+                    : (sh.type == 2)? gUnlockSail : gUnlockSlam;
         Color core   = (sh.type == 0)? (Color){130,225,255,255}
-                     : (sh.type == 3)? (Color){120,245,175,255} : (Color){255,110,80,255};
+                     : (sh.type == 3)? (Color){120,245,175,255}
+                     : (sh.type == 2)? (Color){235,245,255,255} : (Color){255,110,80,255};
         Color petalA = (sh.type == 0)? (Color){120,210,255,255}
-                     : (sh.type == 3)? (Color){110,235,160,255} : (Color){255,120,70,255};
+                     : (sh.type == 3)? (Color){110,235,160,255}
+                     : (sh.type == 2)? (Color){190,220,250,255} : (Color){255,120,70,255};
         Color petalB = (sh.type == 0)? (Color){178,155,255,255}
-                     : (sh.type == 3)? (Color){200,255,180,255} : (Color){255,190,90,255};
+                     : (sh.type == 3)? (Color){200,255,180,255}
+                     : (sh.type == 2)? (Color){248,250,255,255} : (Color){255,190,90,255};
         // bloom: 0 = closed bud, 1 = fully open. Ramps open during the cinematic.
         float bloom = 0.0f;
         bool cineHere = (gUnlockCine > 0 && Vector3Distance(sh.p, gUnlockCinePos) < 0.6f);
@@ -212,6 +223,17 @@ static void DrawShrines(float t){
         else if (owned) bloom = 1.0f;
         float breathe = 1.0f + 0.06f*sinf(t*2.2f);
         float glow = 0.55f + 0.45f*sinf(t*3.1f) + bloom*0.7f + (cineHere?1.0f:0.0f);
+        // far away only the core + beacon read - skip the ornament draws
+        bool farAway = !cineHere && Vector3DistanceSqr(sh.p, pl.pos) > 220.0f*220.0f;
+        if (farAway){
+            drawM(gSphere, sh.p+(Vector3){0,0.4f,0}, {0.3f,0.34f,0.3f}, core, TX_WHITE);
+            if (bloom < 0.6f){
+                float b = 1.0f - bloom/0.6f;
+                DrawCylinder((Vector3){sh.p.x, sh.p.y+42, sh.p.z}, 0.9f, 1.7f, 84, 14,
+                             (Color){core.r,core.g,core.b,(unsigned char)((36+22*glow)*b)});
+            }
+            continue;
+        }
         // stem + green calyx (sepals cupping the bud)
         drawM(gCyl, sh.p + (Vector3){0,-1.35f,0}, {0.18f,0.95f,0.18f}, (Color){96,150,84,255}, TX_FIBER);
         for (int k=0;k<5;k++){
@@ -264,7 +286,8 @@ static void DrawUnlockOrb(const Camera3D& cam){
     if (gUnlockCine <= 0) return;
     float el = CINE_DUR - gUnlockCine;
     Color oc = (gUnlockCineType == 0)? (Color){150,225,255,255}
-             : (gUnlockCineType == 3)? (Color){140,250,180,255} : (Color){255,140,90,255};
+             : (gUnlockCineType == 3)? (Color){140,250,180,255}
+             : (gUnlockCineType == 2)? (Color){225,240,255,255} : (Color){255,140,90,255};
     Vector3 fwd = Vector3Normalize(cam.target - cam.position);
     if (el < 1.9f){                               // gathering + rising from the core
         float rise = clampf(el/1.5f, 0, 1);
@@ -285,6 +308,7 @@ static void DrawUnlockOrb(const Camera3D& cam){
 static void DrawWindmills(float t){
     for (auto& w : gWindmills){
         float ang = t*w.spd*DEG2RAD + w.tilt;
+        bool wFar = Vector3DistanceSqr(w.pos, pl.pos) > 250.0f*250.0f;   // spokes vanish first
         Color hub = ctint(w.col,0.75f);
         if (w.hazard){                                         // danger: a pulsing red hub
             float pu = 0.6f + 0.4f*sinf(t*6.0f);
@@ -301,12 +325,15 @@ static void DrawWindmills(float t){
                                  : ((i%2)? w.col : ctint(w.col,1.12f));
             drawM(gCube, mid, {0.12f, w.rad*0.32f, w.rad*1.04f}, sail,
                   TX_CLOTH, (Vector3){1,0,0}, a*RAD2DEG);        // cloth sail
-            drawCylBetween(w.pos, w.pos + dir*w.rad, w.rad*0.04f, w.hazard? (Color){60,20,20,255} : C_WOOD);
+            if (!wFar)
+                drawCylBetween(w.pos, w.pos + dir*w.rad, w.rad*0.04f, w.hazard? (Color){60,20,20,255} : C_WOOD);
         }
     }
 }
 static void DrawBanners(float t){
     for (auto& b : gBanners){
+        float bdx = b.top.x-pl.pos.x, bdy = b.top.y-pl.pos.y, bdz = b.top.z-pl.pos.z;
+        if (bdx*bdx + bdy*bdy + bdz*bdz > 240*240) continue;
         int N = 6; Vector3 prev = b.top;
         for (int i=1;i<=N;i++){
             float fr = (float)i/N;
@@ -320,6 +347,8 @@ static void DrawBanners(float t){
 }
 static void DrawPinwheels(float t){
     for (auto& p : gPinwheels){
+        float pdx = p.pos.x-pl.pos.x, pdy = p.pos.y-pl.pos.y, pdz = p.pos.z-pl.pos.z;
+        if (pdx*pdx + pdy*pdy + pdz*pdz > 260*260) continue;
         float a0 = t*p.spd*DEG2RAD;
         for (int k=0;k<6;k++){
             float a = a0 + k*1.047f;
@@ -332,6 +361,8 @@ static void DrawPinwheels(float t){
 }
 static void DrawUpdrafts(float t){
     for (auto& u : gUpdrafts){
+        float udx = u.base.x-pl.pos.x, udy = u.base.y-pl.pos.y, udz = u.base.z-pl.pos.z;
+        if (udx*udx + udy*udy + udz*udz > 240*240) continue;
         DrawCylinder(u.base, u.rad, u.rad*0.4f, u.hgt, 18, (Color){205,228,255,24});   // faint spout
         for (int k=0;k<12;k++){
             float ph = t*1.6f + k*0.83f;
@@ -493,7 +524,8 @@ void FX_SlamHit(Vector3 pos, bool perfect, float outVel){
 }
 void FX_Win(){
     SND(sWin, 1.0f, 0.95f);
-    MSG("* YOU VAULTED THE CASTLE! *", 6.0f);
+    MSG(gLevel == 6? "* THE STAR IS YOURS - YOU CLIMBED THE WHOLE REALM! *"
+                   : "* YOU VAULTED THE CASTLE! *", 6.0f);
 }
 
 // -------------------------------------------------------------- save file --
@@ -501,10 +533,10 @@ static void SaveGame(void){
     char buf[512];
     snprintf(buf, sizeof(buf),
         "bestAlt=%.2f\nbestTime=%.2f\nwins=%d\ntotFalls=%d\ntotVaults=%d\nlevel=%d\n"
-        "uweb=%d\nuslam=%d\n"
+        "uweb=%d\nuslam=%d\nusail=%d\nuwall=%d\n"
         "resume=%d\npx=%.2f\npy=%.2f\npz=%.2f\nyaw=%.4f\npitch=%.4f\ntime=%.2f\n",
         gBestEver, gBestTime, gWins, gTotFalls, gTotVaults, gLevel,
-        gUnlockWeb?1:0, gUnlockSlam?1:0,
+        gUnlockWeb?1:0, gUnlockSlam?1:0, gUnlockSail?1:0, gUnlockWall?1:0,
         gWon? 0:1, pl.pos.x, pl.pos.y, pl.pos.z, pl.yaw, pl.pitch, gTime);
     SaveFileText(gSavePath, buf);
 }
@@ -520,7 +552,17 @@ static float readKey(const char* txt, const char* key, float def){
 // Gorge are simply handed web (their teacher lives back in the Megashroom).
 // A mid-level RESUME keeps what you'd already earned so you're never stranded
 // above a shrine. resumeY < 0 means a fresh entry (warp / new run).
-static void SetLevelUnlocks(float resumeY){
+static void SetLevelUnlocks(float resumeY, bool sWeb=false, bool sSlam=false,
+                            bool sSail=false, bool sWall=false){
+    if (gLevel == 6){
+        // THE ASCENT: powers are earned at the shrines ONCE and kept forever
+        // (the save carries them); a resume above a shrine also counts.
+        gUnlockWeb  = sWeb  || resumeY > 152.0f;        // Weaver's shelf ~149
+        gUnlockSlam = sSlam || resumeY > 313.0f;        // Thunder shrine on the mesa 310
+        gUnlockSail = sSail || resumeY > 389.0f;        // Skysail shrine on P0 387
+        gUnlockWall = sWall || resumeY > 543.0f;        // Springheart on the bone plateau 540
+        return;
+    }
     bool pastWeb  = (gLevel == 1 && resumeY > 68.0f);   // resumed above the Weaver's Bloom
     bool pastSlam = (gLevel == 3 && resumeY >  6.0f);   // resumed up a Gorge shaft, past the mouth
     bool pastWall = (gLevel == 5 && resumeY >  6.0f);   // resumed up the Bonewood, past the Springheart
@@ -537,20 +579,23 @@ static void LoadSave(void){
     gWins      = (int)readKey(txt,"wins",0);
     gTotFalls  = (int)readKey(txt,"totFalls",0);
     gTotVaults = (int)readKey(txt,"totVaults",0);
-    int lv = (int)readKey(txt,"level",0);
-    if (lv >= 1 && lv <= 5 && gLevel != lv){
-        BuildWorld(lv);                               // resume on the saved level
-        pl.pos = gSpawn;
-    }
+    // the game IS the ascent now. A pre-ascent (per-world) save keeps its
+    // lifetime stats but starts the climb clean: powers are re-earned at the
+    // shrines in route order, and old per-world best times don't compare.
     bool resuming = readKey(txt,"resume",0) > 0.5f;
+    int lv = (int)readKey(txt,"level",6);
+    bool oldSave = (lv != 6);
+    if (oldSave){ resuming = false; gBestTime = 0; }
     float resumeY = resuming? readKey(txt,"py",gSpawn.y) : -1.0f;
-    SetLevelUnlocks(resumeY);                         // shrines re-arm unless you resumed past them
+    SetLevelUnlocks(resumeY,
+                    !oldSave && readKey(txt,"uweb",0)  > 0.5f, !oldSave && readKey(txt,"uslam",0) > 0.5f,
+                    !oldSave && readKey(txt,"usail",0) > 0.5f, !oldSave && readKey(txt,"uwall",0) > 0.5f);
     if (resuming){
         pl.pos = { readKey(txt,"px",gSpawn.x), readKey(txt,"py",gSpawn.y), readKey(txt,"pz",gSpawn.z) };
         pl.yaw = readKey(txt,"yaw",0); pl.pitch = clampf(readKey(txt,"pitch",0.05f), -1.55f, 1.55f);
         gTime = fmaxf(0.0f, readKey(txt,"time",0));
         gTimerStarted = gTime > 0.01f;
-        if (pl.pos.y < 0.85f || fabsf(pl.pos.x) > 214 || pl.pos.z < -74 || pl.pos.z > 274)
+        if (pl.pos.y < 0.85f || fabsf(pl.pos.x) > gBndX-1 || pl.pos.z < gBndZ0+1 || pl.pos.z > gBndZ1-1)
             pl.pos = gSpawn;                          // mangled save: back to the meadow
         pl.apexY = pl.pos.y;
     }
@@ -671,7 +716,8 @@ static void DrawHUD(float t){
     if (gUnlockCine > 0){                              // the unlock cinematic overlay
         float el = CINE_DUR - gUnlockCine;
         Color tc = (gUnlockCineType == 0)? (Color){150,225,255,255}
-                 : (gUnlockCineType == 3)? (Color){140,250,180,255} : (Color){255,150,90,255};
+                 : (gUnlockCineType == 3)? (Color){140,250,180,255}
+                 : (gUnlockCineType == 2)? (Color){225,240,255,255} : (Color){255,150,90,255};
         // cinematic letterbox bars
         float barK = clampf(fminf(el/0.4f, gUnlockCine/0.5f), 0, 1);
         int bh = (int)(H*0.11f*barK);
@@ -794,10 +840,11 @@ static void DrawPause(void){
 static bool gWonMenu = false;      // the choice panel after touching the star
 static void DrawWinPanel(void){
     int W = GetScreenWidth(), H = GetScreenHeight();
-    static const char* titles[6] = {
+    static const char* titles[7] = {
         "* YOU VAULTED THE CASTLE *", "* THE MEGASHROOM IS CLIMBED *",
         "* THE SPOREWAY IS CROSSED *", "* THE GORGE IS CONQUERED *",
-        "* SKYHAVEN IS YOURS *", "* THE BONEWOOD BOWS TO YOU *" };
+        "* SKYHAVEN IS YOURS *", "* THE BONEWOOD BOWS TO YOU *",
+        "* THE ASCENT IS YOURS *" };
     DrawPanelBG(640, 388);
     int y = (H-388)/2 + 30;
     drawTextC(titles[gLevel], W/2, y, 32, C_GOLD); y += 52;
@@ -807,8 +854,11 @@ static void DrawWinPanel(void){
     y += 32;
     drawTextC(TextFormat("%d vaults  ·  %d fouls  ·  %d falls  ·  %d/%d coins",
               pl.vaults, pl.fouls, pl.falls, gCoinCount, (int)gCoins.size()+gQTotal), W/2, y, 20, RAYWHITE); y += 46;
-    drawTextC("[1]  run this world back", W/2, y, 22, (Color){255,246,210,255}); y += 32;
-    drawTextC("[2]  onward - the next world", W/2, y, 22, (Color){255,246,210,255}); y += 32;
+    drawTextC(gLevel == 6? "[1]  climb it again, from the meadow" : "[1]  run this world back",
+              W/2, y, 22, (Color){255,246,210,255}); y += 32;
+    if (gLevel != 6){
+        drawTextC("[2]  onward - the next world", W/2, y, 22, (Color){255,246,210,255}); y += 32;
+    }
     drawTextC("[3]  close this - stay and enjoy the view", W/2, y, 22, (Color){255,246,210,255});
 }
 
@@ -818,15 +868,15 @@ static void RenderAll(Camera3D cam, float t, bool hud){
         Vector3 off = { frnd(-1,1)*gShake*0.12f, frnd(-1,1)*gShake*0.12f, frnd(-1,1)*gShake*0.12f };
         cam.position = cam.position + off; cam.target = cam.target + off;
     }
-    ClearBackground(SKY_TOP);
+    GfxFrame(cam.position);                     // also grades the sky to this altitude
+    ClearBackground(gSkyTop);
     int W = GetScreenWidth(), H = GetScreenHeight();
-    DrawRectangleGradientV(0, 0, W, (int)(H*0.72f), SKY_TOP, SKY_FOG);
-    DrawRectangleGradientV(0, (int)(H*0.72f), W, H-(int)(H*0.72f), SKY_FOG, (Color){228,240,252,255});
-    GfxFrame(cam.position);
+    DrawRectangleGradientV(0, 0, W, (int)(H*0.72f), gSkyTop, gSkyFog);
+    DrawRectangleGradientV(0, (int)(H*0.72f), W, H-(int)(H*0.72f), gSkyFog, ctint(gSkyFog, 1.12f));
     BeginMode3D(cam);
-        DrawSkyBits(t);
+        DrawSkyBits(t, cam.position);
         DrawWebAnchors(cam.position);
-        DrawWorld3D(cam.position);
+        DrawWorld3D(cam.position, Vector3Normalize(cam.target - cam.position));
         DrawCoins(t);
         DrawSpores(t);
         DrawShrines(t);
@@ -892,8 +942,17 @@ static void ShotMode(void){
         {{0,55.5f,61},      0,   8, 0,     "shotW4.png"},   // E3: the long glide + venting stump
         {{8,127.2f,157},    0,  10, 0,     "shotW5.png"},   // the crown perch: cap + star
     };
-    const Preset* P = (gLevel==5)? bone : (gLevel==4)? sky2 : (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
-    int n = (gLevel==2)? 4 : (gLevel==1)? 4 : 5;
+    static const Preset ascent[7] = {
+        {{0,0.91f,-8},      0,  16, 0,     "shotA1.png"},   // meadow: the whole wall of the world
+        {{-60,17.0f,72},   35,  22, 0,     "shotA2.png"},   // rampart corner: crag + shroom above the keep
+        {{2,81.0f,174},     0,  16, 0,     "shotA3.png"},   // hanging meadow: the spiral + islands adrift
+        {{104,302.5f,209},  0,  10, 0,     "shotA4.png"},   // star isle: under the mesa rim, the pour-off
+        {{104,311.0f,242},  0,   9, 0,     "shotA5.png"},   // mesa mouth: canyon + thunder shrine
+        {{110,388.5f,488}, 40,  14, 0,     "shotA6.png"},   // P0: terraces, mills, the bone plateau far up
+        {{248,674.0f,748},180, -32, 0,     "shotA7.png"},   // the crown: look DOWN the whole realm
+    };
+    const Preset* P = (gLevel==6)? ascent : (gLevel==5)? bone : (gLevel==4)? sky2 : (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
+    int n = (gLevel==6)? 7 : (gLevel==2)? 4 : (gLevel==1)? 4 : 5;
     for (int i=0;i<n;i++){
         pl.pos = P[i].pos; pl.yaw = P[i].yawD*DEG2RAD; pl.pitch = P[i].pitchD*DEG2RAD;
         pl.charging = P[i].charge > 0;
@@ -906,6 +965,37 @@ static void ShotMode(void){
         }
         TakeScreenshot(P[i].file);
     }
+}
+
+// ------------------------------------------------------- perf probe --------
+// --perf: real ms/frame at seven ascent viewpoints, written to perf_log.txt
+static void PerfMode(void){
+    FILE* pf = fopen("perf_log.txt", "w");
+    SetTargetFPS(0);                      // uncapped - measure true cost
+    struct VP { Vector3 p; float yawD, pitchD; const char* name; };
+    static const VP vp[7] = {
+        {{0,2.9f,-8},        0,  14, "meadow-up"},
+        {{2,83,174},         0,  16, "hanging-meadow"},
+        {{104,304.5f,209},   0,  10, "star-isle"},
+        {{104,313,242},      0,   9, "mesa-mouth"},
+        {{110,390.5f,488},  40,  14, "P0-terraces"},
+        {{104,352,360},      0,  30, "canyon-mid"},
+        {{248,676,748},    180, -32, "crown-down"},
+    };
+    for (auto& v : vp){
+        pl.pos = v.p; pl.yaw = v.yawD*DEG2RAD; pl.pitch = v.pitchD*DEG2RAD; pl.vel = {0,0,0};
+        double t0 = 0; int frames = 0;
+        for (int f=0; f<110; f++){
+            BeginDrawing();
+            RenderAll(GetCam(), (float)GetTime(), false);
+            EndDrawing();
+            if (f == 10){ t0 = GetTime(); }
+            if (f > 10) frames++;
+        }
+        double ms = (GetTime()-t0)/frames*1000.0;
+        if (pf) fprintf(pf, "%-16s %6.2f ms/frame  (%4.0f fps)\n", v.name, ms, 1000.0/ms);
+    }
+    if (pf) fclose(pf);
 }
 
 // --------------------------------------------------- autopilot verification
@@ -1093,6 +1183,29 @@ static Trig gTrigsGorge[] = {
     {50.0f, "The Throat: one PERFECT slam off the plank reaches the true exit.", false},
     {64.0f, "Spore the pinnacles. Then one last perfect slam... into the star.", false},
 };
+static Trig gTrigsAscent[] = {
+    { 15.8f, "The Ramparts. Three lanes up - and this castle is only the doorstep.", false},
+    { 45.8f, "Keep roof. See the crag behind the spire? Something GREW up there.", false},
+    { 80.5f, "THE HANGING MEADOW. A megashroom took the whole crag. Up its spiral.", false},
+    { 96.0f, "Shelf-caps spiral the stalk. The reds you pass are your parachutes.", false},
+    {143.0f, "A shrine sleeps on the Weaver's Shelf ahead. Wake it.", false},
+    {170.0f, "Canopy heights. Fall lanes run all the way to the castle roofs.", false},
+    {225.0f, "THE CROWN - and the SPOREWAY adrift beyond. DROP onto the reds to cross.", false},
+    {252.0f, "Golden spores turbo the pole. Chain the big hops before the glow dies.", false},
+    {296.0f, "THE HANGING MESA looms. Walk in under its rim - thunder sleeps at the mouth.", false},
+    {316.0f, "Red shafts rise from the mesa floor. Slam LATE, exit through the windows.", false},
+    {352.0f, "The crossing. Two blooms over the river. The sky under it goes down forever.", false},
+    {372.0f, "The crown column: vault it, PERFECT slam, and the boing throws you to the sky terrace.", false},
+    {392.0f, "SKYHAVEN. Terrace to terrace on the sail - and mind the red mills.", false},
+    {462.0f, "Half the kingdom below you. The great mill crowns the climb east.", false},
+    {530.0f, "The crown mill. A bone bridge leads into the twilight.", false},
+    {543.0f, "THE BONEWOOD. The Springheart waits at the grove gate. One red bail. No more.", false},
+    {560.0f, "Chain wallsprings. Fall in FAST, spring out BIG.", false},
+    {598.0f, "The Drum only answers a PERFECT slam. TAP shift at the last blink.", false},
+    {606.0f, "The dead stalk still breathes. HOLD shift off the lip and catch its lift.", false},
+    {640.0f, "The Hollow Bone. Forty meters of wallsprings over everything you've climbed.", false},
+    {664.0f, "The crown. One vault. One bounce. One star.", false},
+};
 static Trig* gTrigs = gTrigsCastle;
 static int   gTrigN = 6;
 
@@ -1103,6 +1216,7 @@ static void ApplyLevelMeta(void){
     else if (gLevel == 3){ gTrigs = gTrigsGorge;  gTrigN = (int)(sizeof(gTrigsGorge)/sizeof(Trig)); }
     else if (gLevel == 4){ gTrigs = gTrigsSky2;   gTrigN = (int)(sizeof(gTrigsSky2)/sizeof(Trig)); }
     else if (gLevel == 5){ gTrigs = gTrigsBone;   gTrigN = (int)(sizeof(gTrigsBone)/sizeof(Trig)); }
+    else if (gLevel == 6){ gTrigs = gTrigsAscent; gTrigN = (int)(sizeof(gTrigsAscent)/sizeof(Trig)); }
     else                 { gTrigs = gTrigsCastle; gTrigN = (int)(sizeof(gTrigsCastle)/sizeof(Trig)); }
     for (int i=0;i<gTrigN;i++) gTrigs[i].done = false;
 }
@@ -1139,7 +1253,7 @@ static bool EdCheck(void){
     char pa[600], pb[600];
     snprintf(pa, sizeof(pa), "%sedcheck_a.txt", GetApplicationDirectory());
     snprintf(pb, sizeof(pb), "%sedcheck_b.txt", GetApplicationDirectory());
-    for (int lv=0; lv<6; lv++){
+    for (int lv=0; lv<7; lv++){
         BuildWorld(lv, true);
         int cs=(int)solids.size(), cd=(int)decor.size(), cc=(int)gCoins.size(),
             cw=(int)gWebAnchors.size(), cu=(int)gUpdrafts.size(), cm=(int)gWindmills.size();
@@ -1203,6 +1317,37 @@ static bool EdCheck(void){
             allOk = allOk && oOk && bOk;
         } else if (lf) fprintf(lf, "file-override skipped (levels/level0.txt exists)\n");
     }
+    // THE ASCENT seam table: every hand-off between zones must have solid
+    // ground exactly where the route expects it (probe straight down)
+    {
+        BuildWorld(6, true);
+        struct Probe { const char* name; Vector3 p; float top; };
+        static const Probe pr[9] = {
+            {"seam1-cloud",   {0.0f,  86, 153}, 82.0f},    // spire -> crag cloud step
+            {"crag-cap",      {12,    95, 210}, 80.0f},    // the hanging meadow
+            {"shelf-1",       {0.38f, 95, 204.6f}, 85.0f}, // first spiral shelf
+            {"crown-mound",   {12,   235, 210}, 228.0f},   // sporeway shore mound
+            {"mesa-hop",      {104,  307, 215}, 304.0f},   // hop isle under the rim
+            {"mesa-mouth",    {104,  320, 240}, 310.0f},   // canyon walk-on
+            {"skyhaven-P0",   {104,  395, 522}, 387.0f},   // the skysail terrace
+            {"bone-rim",      {236,  550, 560}, 540.0f},   // off the bone bridge
+            {"star-cap",      {248,  680, 760}, 668.0f},   // the final red cap
+        };
+        bool sOk = true;
+        for (int i=0;i<9;i++){
+            float g = GroundTopBelow(pr[i].p);
+            bool ok = fabsf(g - pr[i].top) < 0.8f;
+            if (lf) fprintf(lf, "ascent seam %-12s ground %.2f expect %.2f  %s\n",
+                            pr[i].name, g, pr[i].top, ok?"OK":"FAIL");
+            sOk = sOk && ok;
+        }
+        if (lf) fprintf(lf, "ascent: %d solids %d decor %d coins %d shrines %d updrafts\n",
+                        (int)solids.size(), (int)decor.size(), (int)gCoins.size(),
+                        (int)gShrines.size(), (int)gUpdrafts.size());
+        bool cOk = gShrines.size() == 4 && solids.size() > 350 && gUpdrafts.size() >= 14;
+        if (lf) fprintf(lf, "ascent counts %s\n", cOk?"OK":"FAIL");
+        allOk = allOk && sOk && cOk;
+    }
     char mp[600]; TunPath(mp, sizeof(mp));
     if (!FileExists(mp)){                         // never clobber the user's tuning
         float was = GRAV_UP;
@@ -1223,6 +1368,8 @@ int main(int argc, char** argv){
     bool shotd = (argc > 1) && (strcmp(argv[1], "--shotd") == 0);
     bool shote = (argc > 1) && (strcmp(argv[1], "--shote") == 0);
     bool shotw = (argc > 1) && (strcmp(argv[1], "--shotw") == 0);
+    bool shota = (argc > 1) && (strcmp(argv[1], "--shota") == 0);   // THE ASCENT
+    bool perf  = (argc > 1) && (strcmp(argv[1], "--perf") == 0);
     bool demo  = (argc > 1) && (strcmp(argv[1], "--demo") == 0);
     bool edchk = (argc > 1) && (strcmp(argv[1], "--edcheck") == 0);
     SetTraceLogLevel(LOG_WARNING);
@@ -1237,16 +1384,20 @@ int main(int argc, char** argv){
     if (edchk){ bool ok = EdCheck(); CloseWindow(); return ok? 0 : 1; }
     // harness modes pin exact coordinates: always build from CODE, never a
     // player-edited level file
-    bool harness = shot || shotb || shotc || shotd || shote || shotw || demo;
-    LoadGfx(); InitSky(); BuildWorld(shotw? 5 : shote? 4 : shotd? 3 : shotc? 2 : shotb? 1 : 0, harness);
+    bool harness = shot || shotb || shotc || shotd || shote || shotw || shota || perf || demo;
+    LoadGfx(); InitSky();
+    // the GAME is level 6, THE GREAT ASCENT - every world in one climb.
+    // Harness flags still build the standalone worlds for zone QA.
+    BuildWorld(shota || perf? 6 : shotw? 5 : shote? 4 : shotd? 3 : shotc? 2 : shotb? 1 : demo || shot? 0 : 6, harness);
     for (auto& s : solids) if (s.surf == S_QBLOCK) gQTotal++;
 
-    if (shot || shotb || shotc || shotd || shote || shotw){ ShotMode(); CloseWindow(); return 0; }
+    if (shot || shotb || shotc || shotd || shote || shotw || shota){ ShotMode(); CloseWindow(); return 0; }
+    if (perf){ PerfMode(); CloseWindow(); return 0; }
     if (demo){ DemoMode(); CloseWindow(); return 0; }
 
     InitTuning();                          // mechanics.txt overrides, if present
     LoadAudioAll(); InitWind(); StartMusic(); LoadSave();
-    if (gLevel != 0) ApplyLevelMeta();      // save resumed us elsewhere
+    ApplyLevelMeta();
     DisableCursor();
 
     bool introA=false, introB=false, introC=false;
@@ -1289,8 +1440,11 @@ int main(int argc, char** argv){
             if (gEditMode){
                 gFlyMode = false; gTunOpen = false;
                 MSG("LEVEL EDITOR - LMB pick things, F5 saves the level, F4 exits", 3.5f);
-            } else if (gEditDirty)
-                MSG("editor closed with UNSAVED edits - they play but die on reload (F4, F5 to keep)", 5.0f);
+            } else {
+                gBakeDirty = true;                       // edits may have moved baked decor
+                if (gEditDirty)
+                    MSG("editor closed with UNSAVED edits - they play but die on reload (F4, F5 to keep)", 5.0f);
+            }
         }
         if (IsKeyPressed(KEY_F6)){                       // MECHANIC EDITOR toggle
             if (gEditMode) MSG("close the level editor (F4) first", 2.5f);
@@ -1323,6 +1477,12 @@ int main(int argc, char** argv){
                 if (gResetT >= 1.0f){ DoReset(); gResetT = -0.6f; }
             } else gResetT = 0;
 
+            if (gLevel == 6){                          // the weather lives in bands up here
+                float ay = pl.pos.y;
+                gAirWind = (ay > 380 && ay < 545)? (Vector3){4.0f, 0, 1.6f}      // Skyhaven's easterly
+                         : (ay >= 545)?            (Vector3){1.2f, 0, 0.5f}      // a twilight breath
+                         :                         (Vector3){0, 0, 0};
+            }
             PlayerUpdate(dt, false);
             UpdateCoins(dt);
             UpdateSpores(dt);
@@ -1336,7 +1496,9 @@ int main(int argc, char** argv){
             if (gTimerStarted && !gWon) gTime += dt;
             gBestEver = fmaxf(gBestEver, pl.pos.y);
 
-            if (!introA && t > 0.6f){ introA=true; MSG("SHROOMVAULT - climb to the * on the spire.", 5.0f); }
+            if (!introA && t > 0.6f){ introA=true;
+                MSG(gLevel == 6? "THE GREAT ASCENT - one unbroken climb. The star waits 670 m up."
+                               : "SHROOMVAULT - climb to the * on the spire.", 5.0f); }
             if (!introB && t > 4.8f){ introB=true; MSG("Hold LMB: pole swings. Release in the GREEN = PERFECT vault.", 5.5f); }
             if (!introC && t > 10.2f){ introC=true; MSG("Sprint before you plant - speed becomes height. Flags mark the routes.", 5.0f); }
             static bool webTip = false;
@@ -1347,9 +1509,10 @@ int main(int argc, char** argv){
                 if (!gTrigs[i].done && pl.pos.y > gTrigs[i].alt){ gTrigs[i].done = true; MSG(gTrigs[i].txt, 4.0f); }
 
             // standing on a warp pipe mouth opens the world-select menu
+            // (the ascent has no pipes - one connected world)
             {
                 float wx = pl.pos.x - gWarpTop.x, wz = pl.pos.z - gWarpTop.z;
-                gOnWarp = pl.grounded && wx*wx + wz*wz < 2.0f*2.0f
+                gOnWarp = gWarpGrp >= 0 && pl.grounded && wx*wx + wz*wz < 2.0f*2.0f
                        && fabsf((pl.pos.y - PLAYER_HH) - gWarpTop.y) < 0.5f;
                 if (gOnWarp){
                     int pick = -1;
@@ -1370,10 +1533,12 @@ int main(int argc, char** argv){
                 if (gBestTime <= 0 || gTime < gBestTime) gBestTime = gTime;
                 FX_Win(); SaveGame();
             }
-            if (gWon && gWonMenu){                     // the three roads from the top
+            if (gWon && gWonMenu){                     // the roads from the top
                 if (IsKeyPressed(KEY_ONE))   { gWonMenu = false; DoReset(); }
-                if (IsKeyPressed(KEY_TWO))   { gWonMenu = false; SwitchLevel(); }
-                if (IsKeyPressed(KEY_THREE)) { gWonMenu = false; MSG("The view is yours. Warp pipes wait below.", 4.0f); }
+                if (IsKeyPressed(KEY_TWO) && gLevel != 6) { gWonMenu = false; SwitchLevel(); }
+                if (IsKeyPressed(KEY_THREE)) { gWonMenu = false;
+                    MSG(gLevel == 6? "The whole realm is beneath you. Drink it in." :
+                                     "The view is yours. Warp pipes wait below.", 4.0f); }
             }
             gAutosaveT += dt;
             if (gAutosaveT > 8){ gAutosaveT = 0; SaveGame(); }
@@ -1396,7 +1561,7 @@ int main(int argc, char** argv){
         Sound* snds[13] = {&sBoing,&sPlant,&sWhoosh,&sWhiff,&sFoul,&sTick,&sDing,
                            &sLand,&sStep,&sPop,&sWin,&sPerfect,&sThud};
         for (int i=0;i<13;i++) UnloadSound(*snds[i]);
-        for (int i=0;i<3;i++) UnloadSound(gMusic[i]);
+        for (int i=0;i<5;i++) UnloadSound(gMusic[i]);
         CloseAudioDevice();
     }
     UnloadShader(gToon);

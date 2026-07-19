@@ -1,73 +1,94 @@
 # ShroomVault — PROGRESS
 
-Updated: 2026-07-18
+Updated: 2026-07-18 (late session)
 
 ## Current state
 
-Playable, 6 worlds (Castle, Megashroom, Sporeway, Gorge, Skyhaven, Bonewood).
-Builds with
-`build.bat` (release) / `build.bat dev` (console). Verified via `--demo`
-(physics autopilot), `--shot*` (screenshots), and `--edcheck` (editor +
-serialization self-test, writes `edcheck_log.txt`).
+**THE GREAT ASCENT shipped**: the game is now ONE continuous ~670 m foddian
+climb (level 6) — all six worlds stacked and connected. Standalone worlds
+0–5 remain for harness/editor QA only. Builds with `build.bat` /
+`build.bat dev`.
 
-## Just landed (this session)
+## This session
 
-1. **Mushroom size variety** — route pads, reds, and decoratives now span
-   button (r≈1.5) to colossus (r≈11): fat welcoming first pads, tight crux
-   pads, size-rhythm on the Megashroom shelf spiral, varied bounce caps in
-   Sporeway/Gorge, plus `addMiniShroom`/`addShroomPatch` (decor-only button
-   families, no collision). Cap/stem proportion clamps widened in
-   `addShroom`/`addCap` so extremes read correctly.
-2. **Level editor (F4)** — `src/editor.h`. Group-based (every composite builder
-   tags parts with a shared `grp` id via `GrpScope`). Pick/move/scale/dup/
-   delete, prefab drop (keys 1–0), spawn/star markers, invisible-collision
-   cages. F5 → `levels/levelN.txt`; `BuildWorld` loads that file instead of the
-   code builder when it exists (delete file = back to code). Serializer in
-   `src/level_io.h`; format is hand-editable text.
-3. **Mechanic editor (F6)** — `src/tuning.h`. All physics constants in
-   `game.h` demoted from `const` to live-tunable registry entries (name, range,
-   step, description). Adjust live while playing; F5 → `mechanics.txt`, loaded
-   at startup by `InitTuning()`.
-
-4. **THE BONEWOOD (level 5, warp key 6)** — hardest world, new mechanic
-   **WALLSPRING** (`player.h`: tap LMB mid-air within `WALL_GRACE` of a wall
-   contact → kick `WALL_VY + WALL_CONV·fallspeed` up, `WALL_OUT` away; contact
-   set in `moveHoriz`/`resolveCylsRadial`). Unlocked at the Springheart shrine
-   (type 3, green). Six acts, each gating a mechanic: wallspring chimney ×2,
-   web-only crossing, PERFECT-slam-only drum (drop 14 → apex 28.5 needed 24.7;
-   good slam reaches 19.8 — fails), sail+updraft glide (unsailed range 17 m vs
-   42 m gap), spore-turbo shelves (+9.5 m vs 7.6 m unboosted max). One red
-   bail. Anti-cheese: all mid-void ledges are floating slabs (no kickable
-   column pairs); P2↔drum faces 6.4 m apart (kick cycle nets <1 m there).
+1. **Updraft bug fixed (Bonewood act 4).** Root cause: slam and sail both
+   unlocked there, both on SHIFT — the same press started a SLAM (gravity 62)
+   under the opening canopy, so the geyser felt dead. Now: one power owned =
+   legacy feel; both owned = **SHIFT tap = slam, hold = sail** (E always
+   slams). States mutually exclusive. Updrafts pull toward a target RISE RATE
+   instead of adding raw accel — no column can bank unbounded exit velocity
+   (killed a fresh act-5 skip found by the demo at str 34; also hardens
+   Skyhaven). Geyser buffed 20→34 str, r 7→8; its 76 m ceiling unchanged.
+2. **The restructure** (see BLUEPRINT.md for the full design):
+   - `gBOff` build offsets in every leaf adder + `gMega` skips per builder
+     (own ground slab, warp pipes, horizon dressing). `BuildAscent()` stacks:
+     castle (0,0,0) → megashroom (0,80,170) on a stone **crag plateau** →
+     sporeway (102,225,170) → gorge as a **floating mesa** (104,310,270) →
+     skyhaven (168,385,522) → bonewood on the **bone plateau** (240,540,592).
+     Star at (248, 672.6, 760).
+   - **Seams**: spire→crag cloud steps; crown→shore-mound (they touch); two
+     hop-isles under the mesa rim; gorge-crown slam-boing → Skyhaven P0;
+     bone bridge (arcs past the great mill's blades) → grove rim. All probed
+     in `--edcheck` (9-point seam table, all OK).
+   - **Shrines in route order**: Weaver's Bloom 149 m (web) → Thunder 310 m
+     (slam) → NEW Skysail shrine type 2 on P0 387 m (sail) → Springheart
+     540 m (wallspring). Save persists all four (usail/uwall added). Old
+     per-world saves keep lifetime stats, reset powers/best-time.
+   - **Atmosphere**: altitude-graded sky+fog (day → pale → peach dusk →
+     violet → deep twilight), sun fades out ~430 m, camera-anchored moon +
+     110-star dome above ~400 m, twilight-tinted high clouds, banded wind
+     (Skyhaven's easterly only in its band), 5 music tracks (canyon thunder +
+     twilight grove are new) crossfaded by altitude band.
+   - Warp pipes removed from the game; win panel/triggers/intro texts for
+     level 6; bounds x±340, z −80..850.
+3. **Performance** (was 33–61 fps, now **118–145 fps** at all 7 probe views,
+   `--perf`):
+   - Static opaque decor (~3.4k items) baked into merged meshes bucketed by
+     (90 m band, primitive, texture) — a handful of DrawMesh calls. Alpha
+     decor, landmarks (scale ≥ 40) and editor mode stay per-item.
+     NOTE: raylib de-indexes par_shapes meshes (indices NULL) — bake emits
+     triangle soup. Rebake triggers: BuildWorld + editor exit (gBakeDirty).
+   - The silent killer: immediate-mode DrawSphere for clouds/stars
+     (~14 ms/frame everywhere). Now DrawSphereEx at low segments.
+   - Behind-camera rejection for solids/decor/chunks; distance gates for
+     coins/updrafts/banners/pinwheels; far shrines draw orb+beacon only;
+     windmill spokes vanish past 250 m. Collision loops got a ±y-band
+     early-out (6 worlds of solids).
 
 ## Verification status
 
-- Demo phase 8 PASS: wallspring bot chained 27 m up the Split Trunk through
-  real physics and landed on the 34 m exit lip (`demo_log.txt` WALLSPRING line).
-- Bonewood acts 2–5 are **math-verified only** (ranges/windows derived from
-  live constants, mirroring proven Gorge/Skyhaven/Sporeway numbers) — not yet
-  hand-driven end to end.
-- `--edcheck` PASS: per-level save→load→save byte-identical roundtrip (all 6),
-  editor pick/move/scale/dup/delete ops, file-override + code-fallback path,
-  mechanics.txt roundtrip.
-- `--demo` clean: vault, foul, web swing, perfect slam, Skyhaven updraft
-  height-cap all behave as before the refactor.
-- Screenshots (`--shot`..`--shote`) eyeballed for the new size spread.
-- **Unverified (needs a human hand):** editor *feel* — mouse-pick accuracy at
-  range, nudge step sizes, and the F6 panel ergonomics were exercised only
-  programmatically, not by hand-play.
+- `--demo` PASS end-to-end incl. new phases 9/10 driving the REAL SHIFT
+  branch via gBotShift: hold=sail through the geyser (65.9→77.6 in-column,
+  bough overfly 87.5, no slam), tap=slam (0.01 s conversion, PERFECT drum
+  bounce apex 39.8).
+- `--edcheck` PASS: serialization round-trip levels 0–6, editor ops, ascent
+  seam probes ×9, ascent counts (373 solids / 3509 decor / 183 coins /
+  4 shrines / 14 updrafts).
+- `--shota` eyeballed: tower reads from the meadow; mesa mouth + shrine ✓;
+  dusk at P0 ✓; twilight + stars + plateau at the crown ✓.
+- Boots clean with fresh save and with migrated old save; 6 s live run, no
+  spurious save writes; ~208 MB RAM with baked meshes.
+- **Unverified (needs a human hand):** the full climb end-to-end by hand —
+  especially seam FEEL (S1 cloud steps, S4 slam-boing to P0 is deliberately
+  the tightest, bone bridge), difficulty pacing across zone joins, and music
+  band transitions while climbing. Numbers are derived+probed, not felt.
 
 ## Known constraints / gotchas
 
-- Once a `levels/levelN.txt` exists, code changes to that level's builder in
-  `world.h` stop showing up until the file is deleted or re-saved.
-- Editor arrows conflict with the F6 panel, so F6 is blocked while F4 is open.
-- Harness modes (`--demo`, `--shot*`) always build from code (`forceCode`), so
-  player-edited levels can't break the verification suite.
-- `shroomvault_save.txt` position-resume clamps to world bounds; a level file
-  that moves spawn outside x±214/z −74..274 will trip the mangled-save reset.
+- `levels/level6.txt` (F4 editor save) overrides the whole ascent; delete to
+  return to code. Same per-zone files override standalone builds 0–5.
+- gBakeDirty must be set after any decor mutation outside the editor path
+  (editor exit sets it; BuildWorld sets it).
+- The user's pre-restructure save was replaced with a sanitized one
+  (lifetime falls/vaults kept; fake fly-test bestTime=30.6 s cleared;
+  powers cleared so the shrine cinematics play in order).
+- Save-resume clamps to the level-6 bounds; a hand-edited level file that
+  moves spawn outside them trips the mangled-save reset.
 
 ## Next steps (open)
 
-- Hand-playtest both editors (Chris).
-- Possible: undo stack for the editor; rotation support (only decor has rotY).
+- Chris: hand-play the full ascent; judge seam feel + difficulty pacing.
+- Art second pass candidates: mesa underside silhouette at long range,
+  bone-plateau top texture variety, more connective cloud life at 200–300 m.
+- Possible: per-zone split times on the HUD (foddian speedrun candy);
+  undo stack + rotation for the editor.

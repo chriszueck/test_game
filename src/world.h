@@ -19,6 +19,7 @@
 
 static std::vector<Solid> solids;
 static std::vector<Decor> decor;
+static bool gBakeDirty = true;     // static-decor mesh bake (gfx.h) needs a refresh
 
 // texture slots (filled in gfx.h)
 enum TexId { TX_WHITE, TX_GRASS, TX_STONE, TX_BRICK, TX_Q,
@@ -55,22 +56,29 @@ struct GrpScope {
     ~GrpScope(){ gGrpDepth--; }
 };
 
+// THE GREAT ASCENT: level 6 stacks every world into one continuous climb.
+// gBOff shifts every primitive a zone builder emits (applied in the LEAF
+// adders only, so composite builders never double-offset). gMega makes the
+// builders skip their standalone-only parts (own ground slab, warp pipe,
+// horizon dressing) - BuildAscent provides the connected versions.
+static Vector3 gBOff = {0,0,0};
+static bool    gMega = false;
 static Solid* addBox(Vector3 mn, Vector3 mx, int surf, bool bouncy=false, bool vis=true){
-    Solid s{}; s.isCyl=false; s.mn=mn; s.mx=mx; s.surf=surf; s.bouncy=bouncy; s.visible=vis;
+    Solid s{}; s.isCyl=false; s.mn=mn+gBOff; s.mx=mx+gBOff; s.surf=surf; s.bouncy=bouncy; s.visible=vis;
     s.grp=grpUse();
     solids.push_back(s); return &solids.back();
 }
 static Solid* addCyl(Vector3 base, float rad, float hgt, int surf, bool bouncy=false, bool vis=true){
-    Solid s{}; s.isCyl=true; s.base=base; s.rad=rad; s.hgt=hgt;
-    s.mn={base.x-rad, base.y, base.z-rad}; s.mx={base.x+rad, base.y+hgt, base.z+rad};
+    Solid s{}; s.isCyl=true; s.base=base+gBOff; s.rad=rad; s.hgt=hgt;
+    s.mn={s.base.x-rad, s.base.y, s.base.z-rad}; s.mx={s.base.x+rad, s.base.y+hgt, s.base.z+rad};
     s.surf=surf; s.bouncy=bouncy; s.visible=vis;
     s.grp=grpUse();
     solids.push_back(s); return &solids.back();
 }
 static void addDecor(int kind, Vector3 pos, Vector3 scale, Color col, int tex=TX_WHITE, float rotY=0){
-    decor.push_back({kind, pos, scale, col, tex, rotY, grpUse()});
+    decor.push_back({kind, pos+gBOff, scale, col, tex, rotY, grpUse()});
 }
-static void addWebAnchor(Vector3 pos, float radius=3.0f){ gWebAnchors.push_back({pos, radius, 0, grpUse()}); }
+static void addWebAnchor(Vector3 pos, float radius=3.0f){ gWebAnchors.push_back({pos+gBOff, radius, 0, grpUse()}); }
 
 // mushroom cap only: collision cylinder + toadstool silhouette
 // (overhanging rim lip + domed crown + pale gilled underside + spots)
@@ -170,7 +178,7 @@ static void addFlag(Vector3 groundPos, Color col){
 // spinning collectible coins trace the routes (drawn + collected in main.cpp)
 struct Coin { Vector3 p; bool taken; int grp; };
 static std::vector<Coin> gCoins;
-static void addCoin(float x, float y, float z){ gCoins.push_back({{x,y,z}, false, grpUse()}); }
+static void addCoin(float x, float y, float z){ gCoins.push_back({{x+gBOff.x, y+gBOff.y, z+gBOff.z}, false, grpUse()}); }
 // hanging pennant banner on a wall face (face normal along -Z; rotY to reorient)
 static void addBanner(Vector3 topCenter, Color col, float w=1.5f, float h=2.6f){
     GrpScope _g;
@@ -197,43 +205,44 @@ static int     gWarpGrp = -1;           // the warp pipe's group: moving it move
 
 // warp pipe: a fat green pipe + flag; standing on its lip cycles to the next level
 static void addWarpPipe(Vector3 groundPos, Color flagCol){
+    if (gMega) return;                 // one connected world: nowhere to warp
     GrpScope _g;
     gWarpGrp = gGrp;
     addPipe(groundPos, 2.0f, 2.6f);
-    gWarpTop = { groundPos.x, groundPos.y + 2.6f, groundPos.z };
+    gWarpTop = groundPos + gBOff + (Vector3){0, 2.6f, 0};
     addFlag({groundPos.x + 2.9f, groundPos.y, groundPos.z}, flagCol);
     addDecor(D_SPHERE, {groundPos.x, groundPos.y + 3.6f, groundPos.z},
              {0.30f,0.30f,0.30f}, C_GOLD);         // beacon ball over the mouth
 }
 static void addSpore(float x, float y, float z){
     GrpScope _g;
-    gSpores.push_back({{x,y,z}, 0, gGrp});
+    gSpores.push_back({{x+gBOff.x, y+gBOff.y, z+gBOff.z}, 0, gGrp});
     addDecor(D_CYL, {x, y-1.1f, z}, {0.09f, 1.0f, 0.09f}, {96,180,84,255});   // stem (orb drawn live)
 }
 // power shrine: touch it and a new mechanic is yours (orb drawn live)
 static void addShrine(Vector3 groundPos, int type){
     GrpScope _g;
-    gShrines.push_back({{groundPos.x, groundPos.y + 1.7f, groundPos.z}, type, gGrp});
+    gShrines.push_back({groundPos + gBOff + (Vector3){0, 1.7f, 0}, type, gGrp});
     addCyl(groundPos, 1.2f, 0.9f, S_STONE);
     addDecor(D_CYL, {groundPos.x, groundPos.y + 0.88f, groundPos.z}, {1.35f,0.14f,1.35f}, C_GOLD);
     addDecor(D_CYL, {groundPos.x, groundPos.y - 0.02f, groundPos.z}, {1.6f,0.1f,1.6f}, C_STONE_B, TX_STONE);
 }
-static void addMote(Vector3 p, Color c, float r, float spd){ gMotes.push_back({p, c, r, spd, grpUse()}); }
+static void addMote(Vector3 p, Color c, float r, float spd){ gMotes.push_back({p+gBOff, c, r, spd, grpUse()}); }
 
 // ---- SKYHAVEN builders ----------------------------------------------------
 static void addUpdraft(Vector3 base, float rad, float hgt, float str=32.0f){
-    gUpdrafts.push_back({base, rad, hgt, str, grpUse()});
+    gUpdrafts.push_back({base+gBOff, rad, hgt, str, grpUse()});
 }
 static void addWindmill(Vector3 pos, float rad, float tilt, float spd, int blades, Color col, int hazard=0){
-    gWindmills.push_back({pos, rad, tilt, spd, blades, col, hazard, grpUse()});
+    gWindmills.push_back({pos+gBOff, rad, tilt, spd, blades, col, hazard, grpUse()});
 }
 static void addStreamer(Vector3 top, float len, float w, Color col){
-    gBanners.push_back({top, len, w, col, frnd(0,6.283f), grpUse()});
+    gBanners.push_back({top+gBOff, len, w, col, frnd(0,6.283f), grpUse()});
 }
 static void addPinwheel(Vector3 pos, float rad, float spd, Color a, Color b){
     GrpScope _g;
     addDecor(D_CYL, {pos.x, pos.y-1.3f, pos.z}, {0.07f, 1.3f, 0.07f}, C_WOOD);   // pole
-    gPinwheels.push_back({pos, rad, spd, a, b, gGrp});
+    gPinwheels.push_back({pos+gBOff, rad, spd, a, b, gGrp});
 }
 // a floating sky-stone platform (walkable disc + tapered underside + rim)
 static void addSkyPlat(float x, float z, float top, float r){
@@ -241,6 +250,15 @@ static void addSkyPlat(float x, float z, float top, float r){
     addCyl({x, top-1.6f, z}, r, 1.6f, S_SKYSTONE);
     addDecor(D_CYL, {x, top-0.28f, z}, {r+0.18f, 0.4f, r+0.18f}, (Color){236,242,252,255}, TX_SKY);
     addDecor(D_CONE, {x, top-4.6f, z}, {r*0.9f, 3.2f, r*0.9f}, (Color){206,216,234,255}, TX_SKY);   // underside
+    addCoin(x, top+1.3f, z);
+}
+// floating grass island: turf disc + dirt belly + lip (Sporeway + the seams)
+static void addIsle(float x, float z, float top, float r){
+    GrpScope _g;
+    addCyl({x, top-2.2f, z}, r, 2.2f, S_GRASS);
+    addDecor(D_SPHERE, {x, top-2.5f, z}, {r*0.94f, 2.8f, r*0.94f}, (Color){124,88,52,255});
+    addDecor(D_SPHERE, {x, top-4.4f, z}, {r*0.45f, 1.6f, r*0.45f}, (Color){104,72,42,255});
+    addDecor(D_CYL, {x, top-0.32f, z}, {r+0.18f, 0.38f, r+0.18f}, C_GRASS_A, TX_GRASS);
     addCoin(x, top+1.3f, z);
 }
 
@@ -558,7 +576,7 @@ static void BuildMegashroom(void){
     gSpawn = { 0, 0.91f, 16.0f };
     gStarP = { CX, 150.7f, CZ };
 
-    addBox({-220,-2,-80},{220,0,280}, S_GRASS);
+    if (!gMega) addBox({-220,-2,-80},{220,0,280}, S_GRASS);   // ascent: grows on the crag plateau
     addWarpPipe({10,0,12}, {90,160,255,255}); // onward to THE SPOREWAY
 
 
@@ -604,13 +622,13 @@ static void BuildMegashroom(void){
         addDecor(D_SPHERE, c, {3.4f,1.0f,3.4f}, C_CLOUD);
         addDecor(D_SPHERE, {c.x+1.8f,c.y-0.15f,c.z-0.5f}, {2.1f,0.8f,2.1f}, C_CLOUD);
     }
-    // an ELDER megashroom broods on the horizon - you are climbing its child
-    addDecor(D_CYL, {-135, 0, 190}, {9.5f, 62.0f, 9.5f}, (Color){238,226,200,255}, TX_FIBER);
-    addCap(-135, 190, 68.0f, 26.0f, false);
-    addDecor(D_CYL, {148, 0, 148}, {6.0f, 38.0f, 6.0f}, (Color){241,230,206,255}, TX_FIBER);
-    addCap(148, 148, 42.0f, 16.0f, true);
-    // a forest of lesser kin rings the clearing
-    {
+    if (!gMega){
+        // an ELDER megashroom broods on the horizon - you are climbing its child
+        addDecor(D_CYL, {-135, 0, 190}, {9.5f, 62.0f, 9.5f}, (Color){238,226,200,255}, TX_FIBER);
+        addCap(-135, 190, 68.0f, 26.0f, false);
+        addDecor(D_CYL, {148, 0, 148}, {6.0f, 38.0f, 6.0f}, (Color){241,230,206,255}, TX_FIBER);
+        addCap(148, 148, 42.0f, 16.0f, true);
+        // a forest of lesser kin rings the clearing
         float fx[9] = {-62, -84, -48,  58,  80,  66, -20,  30, -70};
         float fz[9] = { -8,  60, 118, -18,  52, 118, -52, -58, -44};
         float fh[9] = { 11,  22,  6,  13,  26,  10,  4,  16,  14};
@@ -756,18 +774,21 @@ static void BuildMegashroom(void){
         float x = frnd(-80,80), z = frnd(-40,120);
         float dx = x-CX, dz = z-CZ;
         if (dx*dx+dz*dz < 15*15) continue;
+        if (gMega && dx*dx+dz*dz > 34*34) continue;      // stay on the crag plateau
         Color heads[4] = {{255,90,90,255},{255,200,60,255},{255,255,255,255},{255,120,200,255}};
         addDecor(D_CYL,   {x,0,z},     {0.06f,0.55f,0.06f}, {60,150,50,255});
         addDecor(D_SPHERE,{x,0.62f,z}, {0.2f,0.2f,0.2f},  heads[GetRandomValue(0,3)]);
     }
-    addShroom({-45,0, 20}, 10.0f, 6.0f, false);
-    addShroom({ 48,0, 70},  4.5f, 2.4f, false);
-    addShroom({-38,0, 90},  8.0f, 5.2f, true);
-    for (int i=0;i<9;i++){
-        float ang = -0.6f + i*0.35f;
-        float d = frnd(300,380);
-        addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
-                 {frnd(60,130), frnd(48,104), frnd(60,130)}, {70,172,88,255});
+    if (!gMega){
+        addShroom({-45,0, 20}, 10.0f, 6.0f, false);
+        addShroom({ 48,0, 70},  4.5f, 2.4f, false);
+        addShroom({-38,0, 90},  8.0f, 5.2f, true);
+        for (int i=0;i<9;i++){
+            float ang = -0.6f + i*0.35f;
+            float d = frnd(300,380);
+            addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
+                     {frnd(60,130), frnd(48,104), frnd(60,130)}, {70,172,88,255});
+        }
     }
 }
 
@@ -780,18 +801,11 @@ static void BuildSporeway(void){
     gSpawn = { -98, 0.91f, 40 };
     gStarP = { 2, 78.6f, 39 };
 
-    addBox({-220,-2,-80},{220,0,280}, S_GRASS);
+    if (!gMega) addBox({-220,-2,-80},{220,0,280}, S_GRASS);   // ascent: open sky below
     addWarpPipe({-106,0,40}, {255,150,60,255});    // onward to THE GORGE
 
     // floating island: grass disc + dirt belly + lip
-    auto island = [&](float x, float z, float top, float r){
-        GrpScope _g;
-        addCyl({x, top-2.2f, z}, r, 2.2f, S_GRASS);
-        addDecor(D_SPHERE, {x, top-2.5f, z}, {r*0.94f, 2.8f, r*0.94f}, (Color){124,88,52,255});
-        addDecor(D_SPHERE, {x, top-4.4f, z}, {r*0.45f, 1.6f, r*0.45f}, (Color){104,72,42,255});
-        addDecor(D_CYL, {x, top-0.32f, z}, {r+0.18f, 0.38f, r+0.18f}, C_GRASS_A, TX_GRASS);
-        addCoin(x, top+1.3f, z);
-    };
+    auto island = [&](float x, float z, float top, float r){ addIsle(x, z, top, r); };
 
     // ---- section A: the BOUNCE run. The islands sit far apart - you must
     //      vault off one, DROP onto the red trampolines floating in the gap,
@@ -826,8 +840,20 @@ static void BuildSporeway(void){
     addCoin(-14.5f, 26.0f, 44); addCoin(-12, 72.0f, 39);
 
     // a couple more red trampolines under the later web lines (bounce bails)
-    addShroom({  7,0,47}, 6.0f, 4.6f, true);       // the big net
-    addShroom({-14,0,44}, 7.0f, 3.0f, true);       // the small net
+    if (!gMega){
+        addShroom({  7,0,47}, 6.0f, 4.6f, true);   // the big net
+        addShroom({-14,0,44}, 7.0f, 3.0f, true);   // the small net
+    } else {
+        // no ground out here - the nets FLOAT, dangling drift-roots
+        addCap(  7, 47, 16.0f, 4.6f, true);
+        addCap(-14, 44, 13.0f, 3.0f, true);
+        for (int k=0;k<3;k++){
+            addDecor(D_CYL, {7+sinf(k*2.1f)*1.5f, 16.0f-4.4f-k*0.8f, 47+cosf(k*2.1f)*1.5f},
+                     {0.08f, 2.6f+k*0.8f, 0.08f}, {112,78,46,255});
+            addDecor(D_CYL, {-14+sinf(k*2.1f)*1.0f, 13.0f-3.6f-k*0.7f, 44+cosf(k*2.1f)*1.0f},
+                     {0.07f, 2.2f+k*0.7f, 0.07f}, {112,78,46,255});
+        }
+    }
 
     // island life: waterfalls spilling into the void, roots, tufted flowers
     {
@@ -890,24 +916,26 @@ static void BuildSporeway(void){
             addDecor(D_CYL, {sx[i], sy[i]-4.4f, sz[i]}, {0.05f, 4.4f, 0.05f}, (Color){200,190,170,200});
         }
     }
-    // meadow dressing
-    for (int i=0;i<46;i++){
-        float x = frnd(-110,40), z = frnd(0,90);
-        Color heads[4] = {{255,90,90,255},{255,200,60,255},{255,255,255,255},{255,120,200,255}};
-        addDecor(D_CYL,   {x,0,z},     {0.06f,0.55f,0.06f}, {60,150,50,255});
-        addDecor(D_SPHERE,{x,0.62f,z}, {0.2f,0.2f,0.2f},  heads[GetRandomValue(0,3)]);
-    }
-    addShroom({-70,0, 75}, 11.0f, 6.2f, false);    // meadow giant
-    addShroom({ 25,0, 70},  5.5f, 3.0f, false);
-    addShroom({ 30,0, 12}, 13.0f, 7.2f, false);    // the far colossus
-    addShroom({ 36,0, 18},  2.8f, 1.6f, true);     // its red button friend
-    addShroomPatch(-80, 0, 52, 6, 3.4f);
-    addShroomPatch( 20, 0, 64, 5, 2.8f);
-    for (int i=0;i<9;i++){
-        float ang = -0.6f + i*0.35f;
-        float d = frnd(300,380);
-        addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
-                 {frnd(60,130), frnd(48,104), frnd(60,130)}, {70,172,88,255});
+    // meadow dressing (standalone only - the ascent has no ground here)
+    if (!gMega){
+        for (int i=0;i<46;i++){
+            float x = frnd(-110,40), z = frnd(0,90);
+            Color heads[4] = {{255,90,90,255},{255,200,60,255},{255,255,255,255},{255,120,200,255}};
+            addDecor(D_CYL,   {x,0,z},     {0.06f,0.55f,0.06f}, {60,150,50,255});
+            addDecor(D_SPHERE,{x,0.62f,z}, {0.2f,0.2f,0.2f},  heads[GetRandomValue(0,3)]);
+        }
+        addShroom({-70,0, 75}, 11.0f, 6.2f, false);    // meadow giant
+        addShroom({ 25,0, 70},  5.5f, 3.0f, false);
+        addShroom({ 30,0, 12}, 13.0f, 7.2f, false);    // the far colossus
+        addShroom({ 36,0, 18},  2.8f, 1.6f, true);     // its red button friend
+        addShroomPatch(-80, 0, 52, 6, 3.4f);
+        addShroomPatch( 20, 0, 64, 5, 2.8f);
+        for (int i=0;i<9;i++){
+            float ang = -0.6f + i*0.35f;
+            float d = frnd(300,380);
+            addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
+                     {frnd(60,130), frnd(48,104), frnd(60,130)}, {70,172,88,255});
+        }
     }
 }
 
@@ -920,7 +948,7 @@ static void BuildGorge(void){
     gSpawn = { 0, 0.91f, -30 };
     gStarP = { 0, 77.6f, 236 };
 
-    addBox({-220,-2,-80},{220,0,280}, S_GRASS);
+    if (!gMega) addBox({-220,-2,-80},{220,0,280}, S_GRASS);   // ascent: a floating mesa
     addWarpPipe({-8,0,-34}, {80,220,90,255});      // home to the castle
     addBox({-15,0,-12},{15,0.08f,238}, S_SAND);    // sandy canyon floor
 
@@ -1090,10 +1118,19 @@ static void BuildGorge(void){
     vine(14.6f, 38, 66, 12);   vine(-14.6f, 46, 104, 15); vine(14.6f, 52, 118, 16);
     vine(-14.6f, 58, 158, 18); vine(14.6f, 60, 172, 15);  vine(-14.6f, 58, 220, 13);
     vine(14.6f, 64, 200, 17);
-    // distant mesas beyond the rims; fireflies keep the crystals company
+    // distant mesas beyond the rims; fireflies keep the crystals company.
+    // In the ascent they FLOAT alongside the great mesa - give them undersides.
     addBox({-120,0,40},{-70,34,110}, S_SAND);
     addBox({70,0,60},{130,42,140}, S_SAND);
     addBox({-110,0,160},{-60,28,220}, S_SAND);
+    if (gMega){
+        float ux[3] = {-95, 100, -85}, uz[3] = {75, 100, 190}, uw[3] = {32, 38, 32};
+        for (int i=0;i<3;i++)
+            for (int k=0;k<3;k++)     // eroded rock belly: shrinking strata lobes
+                addDecor(D_SPHERE, {ux[i], -6.0f - k*11.0f, uz[i]},
+                         {uw[i]*(1.0f-k*0.28f), 9.5f, (uw[i]+8)*(1.0f-k*0.28f)},
+                         ctint((Color){178,128,88,255}, 1.0f - k*0.10f), TX_SAND);
+    }
     addMote({-13, 2.2f, 36},  {255,220,110,255}, 1.8f, 0.8f);
     addMote({ 13, 2.6f, 78},  {255,220,110,255}, 1.6f, 0.7f);
     addMote({-13, 2.4f, 148}, {255,220,110,255}, 1.9f, 0.9f);
@@ -1125,15 +1162,16 @@ static void BuildGorge(void){
                      {0.4f, 1.5f+0.3f*(c2%2), 0.4f}, (Color){110,168,120,255});
         }
     }
-    for (int i=0;i<9;i++){
-        float ang = -0.6f + i*0.35f;
-        float d = frnd(300,380);
-        addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
-                 {frnd(60,130), frnd(48,104), frnd(60,130)}, {70,172,88,255});
-    }
+    if (!gMega)
+        for (int i=0;i<9;i++){
+            float ang = -0.6f + i*0.35f;
+            float d = frnd(300,380);
+            addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
+                     {frnd(60,130), frnd(48,104), frnd(60,130)}, {70,172,88,255});
+        }
     // meadow flowers by the mouth
     for (int i=0;i<26;i++){
-        float x = frnd(-36,36), z = frnd(-44,-14);
+        float x = frnd(gMega? -31.0f : -36.0f, gMega? 31.0f : 36.0f), z = frnd(-40,-14);
         Color heads[4] = {{255,90,90,255},{255,200,60,255},{255,255,255,255},{255,120,200,255}};
         addDecor(D_CYL,   {x,0,z},     {0.06f,0.55f,0.06f}, {60,150,50,255});
         addDecor(D_SPHERE,{x,0.62f,z}, {0.2f,0.2f,0.2f},  heads[GetRandomValue(0,3)]);
@@ -1242,7 +1280,11 @@ static void BuildSkyhaven(void){
     // ---- distant giant windmills on the horizon (silhouette landmarks) -----
     addWindmill({-170, 60, 100}, 36.0f, 0.0f, 10.0f, 4, (Color){150,170,200,255});
     addWindmill({ 190, 90, -50}, 42.0f, 0.0f,  8.0f, 5, (Color){150,170,200,255});
-    addCyl({-170,0,100}, 6, 60, S_SKYSTONE); addCyl({190,0,-50}, 7, 90, S_SKYSTONE);
+    if (!gMega){ addCyl({-170,0,100}, 6, 60, S_SKYSTONE); addCyl({190,0,-50}, 7, 90, S_SKYSTONE); }
+    else {       // in the ascent they hang from sky-stone shards, not the ground
+        addDecor(D_CYL, {-170, 46, 100}, {6, 14, 6}, (Color){222,232,246,255}, TX_SKY);
+        addDecor(D_CYL, { 190, 74, -50}, {7, 16, 7}, (Color){222,232,246,255}, TX_SKY);
+    }
 
     // warp pipe home, on the launch terrace
     addWarpPipe({-64, 2.0f, -5}, {150,190,250,255});
@@ -1265,7 +1307,7 @@ static void BuildBonewood(void){
     gSpawn = { 0, 0.91f, -20 };
     gStarP = { 8, 132.6f, 168 };
 
-    addBox({-220,-2,-80},{220,0,280}, S_GRASS);
+    if (!gMega) addBox({-220,-2,-80},{220,0,280}, S_GRASS);   // ascent: the bone plateau
     addWarpPipe({12,0,-24}, {228,222,205,255});    // bone-white flag home
 
     // colors of the dead wood
@@ -1405,14 +1447,214 @@ static void BuildBonewood(void){
         addDecor(D_SPHERE, {sinf(a)*44, 1.4f, 60+cosf(a)*52+60},
                  {frnd(9,15), frnd(1.6f,2.6f), frnd(9,15)}, (Color){222,232,236,90});
     }
-    // grey-green burial hills on the horizon
-    for (int i=0;i<9;i++){
-        float ang = -0.6f + i*0.35f;
-        float d = frnd(300,380);
-        addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
-                 {frnd(60,130), frnd(48,104), frnd(60,130)}, {96,138,104,255});
+    // grey-green burial hills on the horizon (standalone only)
+    if (!gMega)
+        for (int i=0;i<9;i++){
+            float ang = -0.6f + i*0.35f;
+            float d = frnd(300,380);
+            addDecor(D_SPHERE, {sinf(ang)*d, -frnd(60,130)*0.55f, 100+cosf(ang)*d},
+                     {frnd(60,130), frnd(48,104), frnd(60,130)}, {96,138,104,255});
+        }
+}
+
+// ===================================================== THE GREAT ASCENT ====
+// Level 6: every world, one climb. Zone build offsets (see BLUEPRINT.md):
+// castle grounds the tower; the Megashroom grows on a stone crag behind the
+// keep; the Sporeway drifts above its crown; the Gorge is a colossal floating
+// mesa; Skyhaven's mills ride above its rim; the Bonewood plateau crowns it
+// all in twilight. Seams connect them; falls cascade down through everything.
+static const Vector3 OFF_SHROOM = {  0,  80, 170};
+static const Vector3 OFF_SPORE  = {102, 225, 170};
+static const Vector3 OFF_GORGE  = {104, 310, 270};
+static const Vector3 OFF_SKY    = {168, 385, 522};
+static const Vector3 OFF_BONE   = {240, 540, 592};
+static const Vector3 ASCENT_STAR = {248, 672.6f, 760};
+
+// connective tissue: supports under each zone, the five seams, ground carpet
+static void BuildSeams(void){
+    // ---- the wider realm: ground carpet + rolling hills under the drift ----
+    addBox({ 220,-2,-80},{ 360,0,850}, S_GRASS);
+    addBox({-360,-2,-80},{-220,0,850}, S_GRASS);
+    addBox({-220,-2,280},{ 220,0,850}, S_GRASS);
+    for (int i=0;i<16;i++){                        // foothill spheres under the tower line
+        float t = i/15.0f;
+        float hx = lerpf(-40, 300, t) + frnd(-70,70);
+        float hz = lerpf(240, 820, t) + frnd(-60,60);
+        float s  = frnd(26,64);
+        addDecor(D_SPHERE, {hx, -s*0.62f, hz}, {s, s*0.75f, s}, {70,172,88,255});
+    }
+    for (int i=0;i<10;i++){                        // and a far mountain ring
+        float ang = i*0.628f;
+        float d = frnd(480,580);
+        addDecor(D_SPHERE, {120+sinf(ang)*d, -frnd(60,140)*0.5f, 380+cosf(ang)*d},
+                 {frnd(90,170), frnd(70,140), frnd(90,170)}, {84,150,96,255});
+    }
+    for (int i=0;i<26;i++){                        // meadows live under the whole climb
+        float x = frnd(-60, 320), z = frnd(280, 800);
+        addShroomPatch(x, 0, z, 4, frnd(2.2f,3.6f));
+        if (i%3==0) addShroom({x+frnd(8,20), 0, z+frnd(8,20)}, frnd(4,12), frnd(2.2f,6.0f), i%6==0);
+    }
+
+    // ---- THE CRAG: stone spur the Megashroom grows from (falls land here) --
+    {
+        Vector3 CC = {0, 0, OFF_SHROOM.z + 40};              // plateau center (0,210)
+        addCyl({CC.x, 0, CC.z}, 42, 78, S_STONE, false, false);
+        addCyl({CC.x, 78, CC.z}, 42, 2, S_GRASS);            // the hanging meadow cap
+        Color strata[4] = {{164,150,132,255},{186,172,150,255},{150,138,122,255},{200,188,166,255}};
+        for (int b=0;b<4;b++)                                 // banded rock flanks
+            addDecor(D_CYL, {CC.x, b*19.0f, CC.z}, {42.8f - b*0.5f, 19.4f, 42.8f - b*0.5f},
+                     strata[b], TX_STONE);
+        addDecor(D_CYL, {CC.x, 76.6f, CC.z}, {43.4f, 1.6f, 43.4f}, {121,96,62,255});   // soil lip
+        for (int k=0;k<10;k++){                               // skirt boulders + roots
+            float a = k*0.628f + 0.3f;
+            addDecor(D_SPHERE, {CC.x+sinf(a)*43.0f, frnd(1,5), CC.z+cosf(a)*43.0f},
+                     {frnd(3,7), frnd(2.5f,5), frnd(3,7)}, strata[k%4], TX_STONE);
+            addDecor(D_CYL, {CC.x+sinf(a)*41.5f, 68.0f-k%3*4.0f, CC.z+cosf(a)*41.5f},
+                     {0.35f, frnd(6,12), 0.35f}, {96,74,46,255}, TX_FIBER);
+        }
+        for (int k=0;k<16;k++){                               // rim ring: the edge must READ
+            float a = k*0.393f + 0.15f;
+            float rr = 39.6f + frnd(-0.8f,0.8f);
+            if (k%3 == 0)
+                addMiniShroom(CC.x+sinf(a)*rr, 80.0f, CC.z+cosf(a)*rr, frnd(0.5f,1.0f), k%6==0);
+            else
+                addDecor(D_SPHERE, {CC.x+sinf(a)*rr, 80.2f, CC.z+cosf(a)*rr},
+                         {frnd(0.8f,1.7f), frnd(0.5f,1.0f), frnd(0.8f,1.7f)},
+                         (Color){168,166,158,255}, TX_STONE);
+        }
+        // two silver threads fall from the hanging meadow into the castle woods
+        addDecor(D_CUBE, {-30.5f, 40, 181.0f}, {0.5f, 76, 1.6f}, (Color){160,210,250,200});
+        addDecor(D_CUBE, { 26.0f, 42, 245.0f}, {0.6f, 72, 1.8f}, (Color){160,210,250,180});
+        addDecor(D_SPHERE, {-30.5f, 1.2f, 181.0f}, {2.4f,1.0f,2.4f}, (Color){230,244,252,150});
+        addDecor(D_SPHERE, { 26.0f, 1.2f, 245.0f}, {2.6f,1.1f,2.6f}, (Color){230,244,252,150});
+        addFlag({2, 80, 172}, {80,220,90,255});               // zone flag: the hanging meadow
+    }
+    // ---- seam 1: spire -> crag. Cloud steps off the balcony ring -----------
+    {
+        struct { float x,z,top; } cl[3] = {{0,153,82.0f},{4,161,81.0f},{-3,169,80.5f}};
+        for (int i=0;i<3;i++){
+            addCyl({cl[i].x, cl[i].top-0.9f, cl[i].z}, 3.1f, 0.9f, S_CLOUD, false, false);
+            addCoin(cl[i].x, cl[i].top+1.3f, cl[i].z);
+            Vector3 c = {cl[i].x, cl[i].top-0.55f, cl[i].z};
+            addDecor(D_SPHERE, c, {3.2f,0.95f,3.2f}, C_CLOUD);
+            addDecor(D_SPHERE, {c.x-1.7f,c.y-0.1f,c.z+0.5f}, {1.9f,0.75f,1.9f}, C_CLOUD);
+            addDecor(D_SPHERE, {c.x+1.6f,c.y-0.1f,c.z-0.4f}, {2.0f,0.8f,2.0f}, C_CLOUD);
+        }
+    }
+    // ---- seam 2: crown -> Sporeway shore mound (they nearly touch) ---------
+    addCoin(4, 229.6f, 210); addCoin(8, 230.0f, 210);
+
+    // ---- seam 3: last island -> THE HANGING MESA ---------------------------
+    addIsle(104, 215.0f, 304.0f, 3.0f);
+    addIsle(104, 221.5f, 308.0f, 2.6f);
+    addFlag({101, 310, 228}, {255,150,60,255});               // zone flag: the mesa
+    // the mesa itself: slab under the whole canyon + eroded underbelly
+    addBox({74, 304, 226},{134, 310, 514}, S_SAND);
+    {   // strata lines on its exposed faces (sells "cut rock", not "flat box")
+        Color sa = {196,120,70,255}, sb = {228,198,150,255};
+        for (int f=0; f<2; f++){
+            float fx = f? 134.12f : 73.88f;
+            addDecor(D_CUBE, {fx, 305.3f, 370}, {0.12f, 0.8f, 143}, sa);
+            addDecor(D_CUBE, {fx, 307.9f, 370}, {0.12f, 1.0f, 143}, sb);
+        }
+        addDecor(D_CUBE, {104, 305.3f, 226.1f}, {30, 0.8f, 0.1f}, sa);
+        addDecor(D_CUBE, {104, 307.9f, 226.1f}, {30, 1.0f, 0.1f}, sb);
+    }
+    for (int i=0;i<6;i++){
+        float uz = 250 + i*45.0f;
+        for (int k=0;k<3;k++)
+            addDecor(D_SPHERE, {104 + sinf(i*1.7f)*8.0f, 298.0f - k*13.0f, uz},
+                     {(34-k*8)*1.0f, 11.0f, (40-k*9)*1.0f},
+                     ctint((Color){178,128,88,255}, 1.0f-k*0.09f), TX_SAND);
+    }
+    for (int k=0;k<9;k++)                                     // dangling vines off the rim
+        addDecor(D_CYL, {74.5f + (k%2)*59.0f, 292.0f - (k%3)*4.0f, 240 + k*30.0f},
+                 {0.09f, frnd(9,16), 0.09f}, {70,150,60,255});
+    // the mouth stream pours off the rim into open sky
+    addDecor(D_CUBE, {98, 288, 226.4f}, {1.6f, 44, 0.5f}, (Color){160,210,250,190});
+    addDecor(D_CUBE, {98, 258, 226.8f}, {2.2f, 22, 0.5f}, (Color){200,230,252,120});
+    addDecor(D_SPHERE, {98, 246, 227}, {3.2f,1.6f,3.2f}, (Color){235,245,252,110});
+    for (int i=0;i<5;i++)                                     // floating shards keep the mesa company
+        addDecor(D_SPHERE, {74 + frnd(-40,-14), frnd(280,330), 240 + i*52.0f},
+                 {frnd(3,6), frnd(2.4f,4.6f), frnd(3,6)}, (Color){186,138,96,255}, TX_SAND);
+
+    // ---- seam 4: gorge crown boing -> Skyhaven P0 (the Skysail shrine) -----
+    addSkyPlat(104, 512, 381.0f, 2.8f);                       // one mercy plat under the leap
+    addShrine({101, 387.0f, 519}, 2);                         // THE SKYSAIL wakes here
+    addCoin(104, 381.5f, 495); addCoin(104, 385.0f, 505); addCoin(107, 388.0f, 515);
+
+    // ---- seam 5: Skyhaven crown -> the bone bridge -> BONEWOOD rim ---------
+    {
+        float bx[4] = {224, 228.5f, 232.5f, 236};
+        float bz[4] = {530, 536, 542, 548};
+        float by[4] = {535.0f, 536.6f, 538.0f, 539.4f};
+        for (int i=0;i<4;i++){
+            addBox({bx[i]-1.6f, by[i]-0.8f, bz[i]-2.2f},{bx[i]+1.6f, by[i], bz[i]+2.2f}, S_WOOD);
+            addDecor(D_CYL, {bx[i]-1.5f, by[i], bz[i]}, {0.12f, 1.0f, 0.12f}, (Color){228,222,205,255}, TX_FIBER);
+            addDecor(D_CYL, {bx[i]+1.5f, by[i], bz[i]}, {0.12f, 1.0f, 0.12f}, (Color){228,222,205,255}, TX_FIBER);
+            addCoin(bx[i], by[i]+1.3f, bz[i]);
+        }
+        addFlag({236, 540, 555}, {228,222,205,255});          // zone flag: the grove
+    }
+    // the bone plateau: one colossal fossil slab in the twilight
+    addBox({165, 532, 552},{315, 540, 832}, S_SKYSTONE);
+    addDecor(D_CUBE, {240, 540.04f, 692}, {150, 0.05f, 280}, (Color){205,199,215,255});  // slate dusk cast
+    for (int f=0; f<2; f++){                                   // fossil bands on the cliff faces
+        float fx = f? 315.1f : 164.9f;
+        addDecor(D_CUBE, {fx, 534.6f, 692}, {0.12f, 0.7f, 279}, (Color){205,196,176,255});
+        addDecor(D_CUBE, {fx, 537.6f, 692}, {0.12f, 0.9f, 279}, (Color){186,178,196,255});
+    }
+    addDecor(D_CUBE, {240, 534.6f, 552.1f}, {75, 0.7f, 0.1f}, (Color){205,196,176,255});
+    addDecor(D_CUBE, {240, 537.6f, 552.1f}, {75, 0.9f, 0.1f}, (Color){186,178,196,255});
+    for (int i=0;i<7;i++){
+        float uz = 575 + i*38.0f;
+        for (int k=0;k<3;k++)
+            addDecor(D_SPHERE, {240 + sinf(i*2.3f)*30.0f, 526.0f - k*12.0f, uz},
+                     {(46-k*11)*1.0f, 10.0f, (52-k*12)*1.0f},
+                     ctint((Color){212,206,190,255}, 1.0f-k*0.08f), TX_FIBER);
+    }
+    for (int k=0;k<8;k++)                                     // grave-lights under the rim
+        addDecor(D_SPHERE, {168 + (k%2)*145.0f, 528.0f - (k%3)*6.0f, 570 + k*32.0f},
+                 {0.8f, 0.6f, 0.8f}, (Color){120,235,215,120});
+
+    // ---- drifting cloud banks stitch the bands together --------------------
+    struct { float x,y,z; } cb[10] = {
+        {-55,175,250},{60,195,230},{-30,300,205},{150,338,240},{60,452,420},
+        {160,470,540},{100,562,560},{290,585,620},{40,120,120},{190,250,330} };
+    for (int i=0;i<10;i++){
+        Vector3 c = {cb[i].x, cb[i].y, cb[i].z};
+        Color cc = (cb[i].y > 520)? (Color){225,214,238,255} : C_CLOUD;   // twilight-kissed up high
+        addDecor(D_SPHERE, c, {8.0f,2.2f,8.0f}, cc);
+        addDecor(D_SPHERE, {c.x-4.6f,c.y-0.4f,c.z+1.2f}, {5.0f,1.7f,5.0f}, cc);
+        addDecor(D_SPHERE, {c.x+4.8f,c.y-0.3f,c.z-1.0f}, {5.4f,1.8f,5.4f}, cc);
+    }
+    // far floating shard-isles for depth at altitude
+    for (int i=0;i<6;i++){
+        float sx = (i%2)? -160.0f+i*18 : 320.0f+i*14;
+        float sy = 340 + i*52.0f, sz = 180 + i*90.0f;
+        addDecor(D_CYL, {sx, sy-2.0f, sz}, {frnd(7,12), 2.2f, frnd(7,12)}, (Color){222,232,246,255}, TX_SKY);
+        addDecor(D_SPHERE, {sx, sy-4.4f, sz}, {frnd(4,7), 3.6f, frnd(4,7)}, (Color){206,216,234,255}, TX_SKY);
     }
 }
+
+static void BuildAscent(void){
+    gMega = true;
+    gBOff = {0,0,0};      BuildCastle();
+    gBOff = OFF_SHROOM;   BuildMegashroom();
+    gBOff = OFF_SPORE;    BuildSporeway();
+    gBOff = OFF_GORGE;    BuildGorge();
+    gBOff = OFF_SKY;      BuildSkyhaven();
+    gBOff = OFF_BONE;     BuildBonewood();
+    gBOff = {0,0,0};
+    BuildSeams();
+    gMega = false;
+    gSpawn = SPAWN_POS;                    // one meadow. one star. 670 m apart.
+    gStarP = ASCENT_STAR;
+    gAirWind = {0,0,0};                    // banded wind is applied live per-frame
+}
+
+// world bounds (player clamp + save sanity), set per level by BuildWorld
+static float gBndX = 215, gBndZ0 = -75, gBndZ1 = 275;
 
 // ------------------------------------------------------------ dispatcher --
 // LEVEL EDITOR: if levels/levelN.txt exists (saved from the F4 editor), it
@@ -1426,12 +1668,16 @@ static void BuildWorld(int level = 0, bool forceCode = false){
     gUpdrafts.clear(); gWindmills.clear(); gBanners.clear(); gPinwheels.clear();
     gAirWind = {0,0,0};
     gGrp = 0; gGrpDepth = 0; gWarpGrp = -1;
-    solids.reserve(600); decor.reserve(1400);
+    gBOff = {0,0,0}; gMega = false; gBakeDirty = true;
+    if (level == 6){ gBndX = 340; gBndZ0 = -80; gBndZ1 = 850; }
+    else           { gBndX = 215; gBndZ0 = -75; gBndZ1 = 275; }
+    solids.reserve(level == 6? 2400 : 600); decor.reserve(level == 6? 8000 : 1400);
     if (!forceCode && LoadLevelFile(level)) return;
     if      (level == 1) BuildMegashroom();
     else if (level == 2) BuildSporeway();
     else if (level == 3) BuildGorge();
     else if (level == 4) BuildSkyhaven();
     else if (level == 5) BuildBonewood();
+    else if (level == 6) BuildAscent();
     else                 BuildCastle();
 }
