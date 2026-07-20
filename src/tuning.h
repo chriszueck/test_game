@@ -47,7 +47,6 @@ static Tun gTun[] = {
     {"SLAM_K_GOOD", &SLAM_K_GOOD,0.3f,  2, 0.02f,"restitution: slammed early"},
     {"SLAM_K_PERF", &SLAM_K_PERF,0.5f,  2, 0.02f,"restitution: slammed at the last blink"},
     {"SLAM_STUN",   &SLAM_STUN,    0,   2, 0.05f,"stun after slamming solid rock"},
-    {"SLAM_TAP",    &SLAM_TAP,  0.08f,0.6f,0.02f,"with sail owned: SHIFT tap shorter than this = slam"},
     // -------- web swing --------
     {"WEB_RANGE",   &WEB_RANGE,    4,  40, 1.0f, "bloom grab range"},
     {"WEB_MAX_T",   &WEB_MAX_T, 0.5f,  10, 0.25f,"seconds on the silk before it snaps"},

@@ -161,6 +161,53 @@ static void DrawSpores(float t){
     }
 }
 
+// ----------------------------------------------------------- thunderseeds --
+static void UpdateThunders(float dt){
+    for (auto& th : gThunders){
+        th.cd = fmaxf(0.0f, th.cd - dt);
+        if (th.cd > 0) continue;
+        float dx = pl.pos.x-th.p.x, dy = pl.pos.y-th.p.y, dz = pl.pos.z-th.p.z;
+        if (dx*dx+dz*dz < 1.8f*1.8f && fabsf(dy) < 2.2f){
+            th.cd = THUNDER_CD;
+            gSlamCharges = (gSlamCharges + th.amount > 9)? 9 : gSlamCharges + th.amount;
+            SND(sThud, 1.6f, 0.5f); SND(sDing, 0.7f, 0.65f);   // a low charged hum
+            SpawnSparkle(th.p, 12);
+            gShake += 0.12f;
+            static bool tip = false;
+            if (!tip){ tip = true; MSG("THUNDERSEEDS! Every slam-BOING spends one - spend them where they grow.", 4.5f); }
+        }
+    }
+}
+static void DrawThunders(float t){
+    for (auto& th : gThunders){
+        float ddx = th.p.x-pl.pos.x, ddz = th.p.z-pl.pos.z;
+        if (ddx*ddx + ddz*ddz > 130*130) continue;
+        if (th.cd > 0){                                // spent: a dull husk regrowing
+            float k = 1.0f - th.cd/THUNDER_CD;
+            drawM(gSphere, th.p, {0.15f+0.16f*k, 0.18f+0.18f*k, 0.15f+0.16f*k},
+                  (Color){96,88,110,255}, TX_STREAK);
+            continue;
+        }
+        Vector3 p = th.p; p.y += sinf(t*2.2f + th.p.x)*0.09f;
+        // the storm-fruit: a deep violet shell cracked with hot amber light
+        drawM(gSphere, p, {0.36f,0.42f,0.36f}, (Color){58,44,92,255}, TX_STREAK);
+        drawM(gSphere, p, {0.23f,0.28f,0.23f}, (Color){255,170,60,255}, TX_WHITE);
+        drawM(gSphere, p, {0.11f,0.14f,0.11f}, (Color){255,240,180,255}, TX_WHITE);
+        for (int k=0;k<3;k++){                          // spinning crack-seams
+            float a = t*80.0f + k*60.0f;
+            drawM(gCube, p, {0.58f,0.045f,0.045f}, (Color){255,196,80,255}, TX_WHITE, {0,1,0}, a);
+        }
+        for (int k=0;k<4;k++){                          // orbiting sparks
+            float a = t*3.0f + k*1.5708f;
+            drawM(gSphere, p + (Vector3){cosf(a)*0.55f, 0.12f*sinf(t*5.0f+k), sinf(a)*0.55f},
+                  {0.055f,0.055f,0.055f}, (Color){255,235,140,255}, TX_WHITE);
+        }
+        for (int k=0;k<th.amount;k++)                   // its bolt count, worn openly
+            drawM(gCone, p + (Vector3){(k - (th.amount-1)*0.5f)*0.20f, 0.52f, 0},
+                  {0.05f,0.15f,0.05f}, (Color){255,210,70,255}, TX_WHITE);
+    }
+}
+
 // ------------------------------------------------------ shrines & unlocks --
 static void SaveGame(void);
 static const char* gUnlockName = "";
@@ -190,11 +237,11 @@ static void UpdateShrines(void){
             } else if (sh.type == 2){
                 gUnlockSail = true;
                 gUnlockName = "THE SKYSAIL";
-                gUnlockSub  = "HOLD SHIFT mid-air to unfurl - ride the updrafts (a TAP still slams)";
+                gUnlockSub  = "hold SPACE mid-air to unfurl - ride the updrafts";
             } else {
                 gUnlockSlam = true;
                 gUnlockName = "THE SLAM";
-                gUnlockSub  = "SHIFT mid-air to dive - slam a red cap at the last blink";
+                gUnlockSub  = "SHIFT mid-air to dive - THUNDERSEEDS fuel the mega-boing";
             }
             gUnlockCine = CINE_DUR; gUnlockCineType = sh.type; gUnlockCinePos = sh.p;
             gUnlockT = (sh.type == 0)? 5.2f : 0.0f;   // web: the distant blooms flare awake
@@ -224,7 +271,7 @@ static void DrawShrines(float t){
         float breathe = 1.0f + 0.06f*sinf(t*2.2f);
         float glow = 0.55f + 0.45f*sinf(t*3.1f) + bloom*0.7f + (cineHere?1.0f:0.0f);
         // far away only the core + beacon read - skip the ornament draws
-        bool farAway = !cineHere && Vector3DistanceSqr(sh.p, pl.pos) > 220.0f*220.0f;
+        bool farAway = !cineHere && Vector3DistanceSqr(sh.p, pl.pos) > 160.0f*160.0f;
         if (farAway){
             drawM(gSphere, sh.p+(Vector3){0,0.4f,0}, {0.3f,0.34f,0.3f}, core, TX_WHITE);
             if (bloom < 0.6f){
@@ -533,10 +580,10 @@ static void SaveGame(void){
     char buf[512];
     snprintf(buf, sizeof(buf),
         "bestAlt=%.2f\nbestTime=%.2f\nwins=%d\ntotFalls=%d\ntotVaults=%d\nlevel=%d\n"
-        "uweb=%d\nuslam=%d\nusail=%d\nuwall=%d\n"
+        "uweb=%d\nuslam=%d\nusail=%d\nuwall=%d\nthun=%d\n"
         "resume=%d\npx=%.2f\npy=%.2f\npz=%.2f\nyaw=%.4f\npitch=%.4f\ntime=%.2f\n",
         gBestEver, gBestTime, gWins, gTotFalls, gTotVaults, gLevel,
-        gUnlockWeb?1:0, gUnlockSlam?1:0, gUnlockSail?1:0, gUnlockWall?1:0,
+        gUnlockWeb?1:0, gUnlockSlam?1:0, gUnlockSail?1:0, gUnlockWall?1:0, gSlamCharges,
         gWon? 0:1, pl.pos.x, pl.pos.y, pl.pos.z, pl.yaw, pl.pitch, gTime);
     SaveFileText(gSavePath, buf);
 }
@@ -593,6 +640,7 @@ static void LoadSave(void){
     if (resuming){
         pl.pos = { readKey(txt,"px",gSpawn.x), readKey(txt,"py",gSpawn.y), readKey(txt,"pz",gSpawn.z) };
         pl.yaw = readKey(txt,"yaw",0); pl.pitch = clampf(readKey(txt,"pitch",0.05f), -1.55f, 1.55f);
+        gSlamCharges = (int)clampf(readKey(txt,"thun",0), 0, 9);
         gTime = fmaxf(0.0f, readKey(txt,"time",0));
         gTimerStarted = gTime > 0.01f;
         if (pl.pos.y < 0.85f || fabsf(pl.pos.x) > gBndX-1 || pl.pos.z < gBndZ0+1 || pl.pos.z > gBndZ1-1)
@@ -690,6 +738,13 @@ static void DrawHUD(float t){
             for (int k=0;k<3;k++)
                 DrawCircleLines(W/2, H/2, 16.0f + k*7.0f + 5.0f*pulse, (Color){130,240,150,120});
     }
+    // thunder in the pole: amber bolt pips under the crosshair
+    if (gUnlockSlam && gSlamCharges > 0)
+        for (int i=0;i<gSlamCharges;i++){
+            float px = W/2.0f - (gSlamCharges-1)*9.0f + i*18.0f;
+            DrawPoly((Vector2){px, (float)H/2 + 66}, 4, 6.0f, 0, (Color){255,196,60,230});
+            DrawPoly((Vector2){px, (float)H/2 + 66}, 4, 3.0f, 0, (Color){255,240,170,240});
+        }
     // spore boost: golden ring counting down around the crosshair
     if (gBoostT > 0){
         float frac = gBoostT/BOOST_DUR;
@@ -767,9 +822,8 @@ static void DrawHUD(float t){
     if (t < 22 && !gWon){
         char hint[260] = "WASD run  ·  LMB charge + release: VAULT";
         if (gUnlockWeb)  strcat(hint, "  ·  RMB near blooms: swing");
-        if (gUnlockSlam && gUnlockSail) strcat(hint, "  ·  SHIFT tap: SLAM, hold: SAIL");
-        else if (gUnlockSlam) strcat(hint, "  ·  SHIFT mid-air: SLAM");
-        else if (gUnlockSail) strcat(hint, "  ·  hold SHIFT mid-air: SAIL");
+        if (gUnlockSlam) strcat(hint, "  ·  SHIFT mid-air: SLAM (thunder)");
+        if (gUnlockSail) strcat(hint, "  ·  hold SPACE mid-air: SAIL");
         if (gUnlockWall) strcat(hint, "  ·  tap LMB on a wall: SPRING");
         strcat(hint, "  ·  ESC pause");
         drawTextC(hint, W/2, H-30, 18, (Color){255,255,255,150});
@@ -817,10 +871,8 @@ static void DrawPause(void){
     lines[nl++] = "release in the bright GREEN = PERFECT (+15%) - hold past it: FOUL";
     lines[nl++] = "red mushrooms are trampolines. aim for them when you fall";
     if (gUnlockWeb)  lines[nl++] = "hold RMB near a glowing web bloom: swing. let go to fly with it";
-    if (gUnlockSlam && gUnlockSail)
-        lines[nl++] = "SHIFT: TAP = slam (E also slams)  ·  HOLD = skysail. W dive, S flare, A/D steer";
-    else if (gUnlockSlam) lines[nl++] = "SHIFT mid-air: SLAM. slam a red at the last blink: PERFECT boing";
-    else if (gUnlockSail) lines[nl++] = "hold SHIFT mid-air: SKYSAIL. W dive, S flare, A/D steer, ride updrafts";
+    if (gUnlockSlam) lines[nl++] = "SHIFT (or E) mid-air: SLAM. THUNDERSEEDS fuel the boing - perfect = last blink";
+    if (gUnlockSail) lines[nl++] = "hold SPACE mid-air: SKYSAIL. W dive, S flare, A/D steer, ride updrafts";
     if (gUnlockWall) lines[nl++] = "tap LMB mid-air against a wall: WALLSPRING. fall in fast = spring out big";
     lines[nl++] = "?-blocks pop a coin on first touch. many roads up, no checkpoints";
     lines[nl++] = "step on a warp pipe to travel to ANY world (new powers at shrines)";
@@ -879,6 +931,7 @@ static void RenderAll(Camera3D cam, float t, bool hud){
         DrawWorld3D(cam.position, Vector3Normalize(cam.target - cam.position));
         DrawCoins(t);
         DrawSpores(t);
+        DrawThunders(t);
         DrawShrines(t);
         DrawUnlockOrb(cam);
         if (!gUpdrafts.empty())  DrawUpdrafts(t);
@@ -948,8 +1001,8 @@ static void ShotMode(void){
         {{2,81.0f,174},     0,  16, 0,     "shotA3.png"},   // hanging meadow: the spiral + islands adrift
         {{104,302.5f,209},  0,  10, 0,     "shotA4.png"},   // star isle: under the mesa rim, the pour-off
         {{104,311.0f,242},  0,   9, 0,     "shotA5.png"},   // mesa mouth: canyon + thunder shrine
-        {{110,388.5f,488}, 40,  14, 0,     "shotA6.png"},   // P0: terraces, mills, the bone plateau far up
-        {{248,674.0f,748},180, -32, 0,     "shotA7.png"},   // the crown: look DOWN the whole realm
+        {{110,388.5f,488},185,  30, 0,     "shotA6.png"},   // P0: the hanging grove overhead
+        {{112,679.0f,385},187, -42, 0,     "shotA7.png"},   // the crown: the WHOLE realm underfoot
     };
     const Preset* P = (gLevel==6)? ascent : (gLevel==5)? bone : (gLevel==4)? sky2 : (gLevel==3)? gorge : (gLevel==2)? sky : gLevel? tower : castle;
     int n = (gLevel==6)? 7 : (gLevel==2)? 4 : (gLevel==1)? 4 : 5;
@@ -973,14 +1026,15 @@ static void PerfMode(void){
     FILE* pf = fopen("perf_log.txt", "w");
     SetTargetFPS(0);                      // uncapped - measure true cost
     struct VP { Vector3 p; float yawD, pitchD; const char* name; };
-    static const VP vp[7] = {
+    static const VP vp[8] = {
         {{0,2.9f,-8},        0,  14, "meadow-up"},
         {{2,83,174},         0,  16, "hanging-meadow"},
         {{104,304.5f,209},   0,  10, "star-isle"},
         {{104,313,242},      0,   9, "mesa-mouth"},
         {{110,390.5f,488},  40,  14, "P0-terraces"},
         {{104,352,360},      0,  30, "canyon-mid"},
-        {{248,676,748},    180, -32, "crown-down"},
+        {{104,545,542},    180, -20, "bone-gate"},
+        {{112,679,385},    187, -42, "crown-down"},
     };
     for (auto& v : vp){
         pl.pos = v.p; pl.yaw = v.yawD*DEG2RAD; pl.pitch = v.pitchD*DEG2RAD; pl.vel = {0,0,0};
@@ -1029,7 +1083,7 @@ static void DemoMode(void){
         }
         if (!slamPhase && T > 10.7f){      // phase 5: perfect slam onto the west red bail
             slamPhase = true;
-            gBoostT = 0;
+            gBoostT = 0; gSlamCharges = 5;             // harness thunder
             pl.pos = {-26, 27.0f, 50}; pl.vel = {0,0,0}; pl.yaw = 0;
         }
         gBotSlam = (T > 11.35f && T < 11.43f);   // pressed ~0.27 s before impact = PERFECT
@@ -1042,7 +1096,8 @@ static void DemoMode(void){
             BuildWorld(4, true); gUnlockSail = true;
             pl = Player(); pl.pos = {-57, 7.0f, 8}; pl.vel = {0,-4,0}; pl.yaw = 1.4f;  // over updraft U0 (gap P0->P1)
         }
-        gBotSail = (T > 15.45f && T < 22.0f);    // hold the sail the WHOLE time (cheat attempt)
+        gBotSail = (T > 15.45f && T < 22.0f)     // hold the sail the WHOLE time (cheat attempt)
+                || (T > 28.7f && T < 33.2f);     // ...and phase 9's geyser glide
         if (T > 15.45f && T < 22.0f){            // pin to U0's axis: a player perfectly fighting the wind.
             pl.pos.x = -57.0f; pl.pos.z = 8.0f;  // harness-only - proves the column's height CAP (~P1, not the moon)
             pl.vel.x = 0; pl.vel.z = 0;
@@ -1054,16 +1109,15 @@ static void DemoMode(void){
         }
         gBotKick = (T > 22.45f && T < 28.0f);    // press held: springs fire on every wall touch
         if (kickPhase && T < 28.5f){ kickYmax = fmaxf(kickYmax, pl.pos.y); if (kickY0 == 0) kickY0 = pl.pos.y; }
-        // phase 9: BONEWOOD act 4 - slam AND sail owned, SHIFT *held* through the
-        // spore-geyser updraft. This exact input used to start a SLAM (62 m/s^2)
-        // under the open canopy and the updraft read as broken. Held SHIFT must
-        // now sail and the column must lift the glide.
+        // phase 9: BONEWOOD act 4 - slam AND sail owned, the sail held through
+        // the spore-geyser updraft. The held canopy must glide (never slam)
+        // and the column must lift it.
         if (!glidePhase && T > 28.6f){
             glidePhase = true;
             BuildWorld(5, true); gUnlockSlam = true; gUnlockSail = true; gUnlockWall = false;
             pl = Player(); pl.pos = {0, 70.0f, 78}; pl.vel = {0, 0, 12}; pl.yaw = 0;
         }
-        gBotShift = (T > 28.7f && T < 33.2f) || (T > 34.3f && T < 34.4f);
+        gBotShift = (T > 34.3f && T < 34.4f);    // phase 10: SHIFT press = instant slam
         if (glidePhase && !tapPhase){
             if (pl.slamming) glideSlammed = true;
             if (pl.sailing)  glideSailed = true;
@@ -1071,14 +1125,15 @@ static void DemoMode(void){
             if (glideExitY  == 0 && pl.pos.z >= 101) glideExitY  = pl.pos.y;   // column far edge
             if (glideBoughY < 0 && pl.pos.z >= 118)  glideBoughY = pl.pos.y;   // over the landing bough
         }
-        // phase 10: the tap. SHIFT down 0.1 s then released while falling onto
-        // the Drum - the release must convert into a SLAM (canopy shut).
+        // phase 10: SHIFT while falling onto the Drum = instant slam, and a
+        // THUNDERSEED charge turns the hit into the mega-boing.
         if (!tapPhase && T > 33.6f){
             tapPhase = true;
+            gSlamCharges = 3;
             pl = Player(); pl.pos = {0, 46.0f, 55}; pl.vel = {0,0,0}; pl.yaw = 0;
         }
         if (tapPhase){
-            if (tapReleaseT < 0 && T > 34.4f) tapReleaseT = T;
+            if (tapReleaseT < 0 && T > 34.3f) tapReleaseT = T;   // the press moment
             if (pl.slamming && !tapSlammed){ tapSlammed = true; tapSlamT = T; }
             if (tapSlammed && pl.vel.y > 5.0f) tapBounced = true;              // the drum answered
             if (tapBounced) tapApexAfter = fmaxf(tapApexAfter, pl.pos.y);
@@ -1098,7 +1153,9 @@ static void DemoMode(void){
         if (!shotA && T > 2.62f){ TakeScreenshot("demo_flight.png"); shotA = true; }   // vault kick
         if (!shotB && T > 5.9f){ TakeScreenshot("demo_swing.png"); shotB = true; }     // web swing
     }
-    gBotFwd = gBotHold = gBotWeb = gBotSlam = gBotSail = gBotKick = gBotShift = false; gBoostT = 0;
+    gBotFwd = gBotHold = gBotWeb = gBotSlam = gBotSail = gBotKick = gBotShift = false;
+    gBoostT = 0;
+    int thunderLeft = gSlamCharges; gSlamCharges = 0;
     if (lf){
         fprintf(lf, "SUMMARY maxY=%.2f vaults=%d fouls=%d falls=%d final=(%.1f,%.1f,%.1f)\n",
                 maxY, pl.vaults, pl.fouls, pl.falls, pl.pos.x, pl.pos.y, pl.pos.z);
@@ -1106,12 +1163,12 @@ static void DemoMode(void){
                 kickY0, kickYmax, kickYmax - kickY0);
         bool glideOk = glideSailed && !glideSlammed && glideExitY > glideEnterY + 2.0f
                     && glideBoughY > 58.0f;
-        fprintf(lf, "SHIFTHOLD=SAIL %s  sailed=%d slammed=%d enterY=%.1f exitY=%.1f boughY=%.1f (updraft must lift the glide)\n",
+        fprintf(lf, "SPACEHOLD=SAIL %s  sailed=%d slammed=%d enterY=%.1f exitY=%.1f boughY=%.1f (updraft must lift the glide)\n",
                 glideOk? "OK":"FAIL", glideSailed?1:0, glideSlammed?1:0, glideEnterY, glideExitY, glideBoughY);
         bool tapOk = tapSlammed && tapReleaseT > 0 && (tapSlamT - tapReleaseT) < 0.15f && tapBounced;
-        fprintf(lf, "SHIFTTAP=SLAM %s  slammed=%d dt=%.2f bounced=%d apexAfter=%.1f (release converts to the dive)\n",
+        fprintf(lf, "SHIFT=SLAM %s  slammed=%d dt=%.2f bounced=%d apexAfter=%.1f thunderLeft=%d (press dives, a seed fuels the boing)\n",
                 tapOk? "OK":"FAIL", tapSlammed?1:0, tapSlammed? (tapSlamT - tapReleaseT) : -1.0f,
-                tapBounced?1:0, tapApexAfter);
+                tapBounced?1:0, tapApexAfter, thunderLeft);
         fclose(lf);
     }
 }
@@ -1126,6 +1183,7 @@ static void DoReset(void){
     for (auto& s : solids) s.used = false;         // ?-blocks refill
     gCoinCount = 0; gCoinCombo = 0; gCoinPops.clear();
     gBoostT = 0; for (auto& sp : gSpores) sp.cd = 0;
+    gSlamCharges = 0; for (auto& th : gThunders) th.cd = 0;   // thunder regrows with the run
     for (auto& wa : gWebAnchors) wa.wilt = 0;      // blooms regrow - never soft-lock a web gap
     gMsgs.clear();
     MSG(hadWon? "Round two. The castle is not impressed." : "Back to the meadow. Breathe.", 3.5f);
@@ -1159,7 +1217,7 @@ static Trig gTrigsSky[] = {
     {68.0f, "One long swing to the star. Time the release. Fly.", false},
 };
 static Trig gTrigsSky2[] = {
-    { 5.0f, "SKYHAVEN. Vault off, then HOLD SHIFT to unfurl your skysail.", false},
+    { 5.0f, "SKYHAVEN. Vault off, then HOLD SPACE to unfurl your skysail.", false},
     {12.0f, "Glide into a swirling UPDRAFT to soar. W dives for speed, S flares.", false},
     {28.0f, "Steer A/D and read the wind - it pushes every glide eastward.", false},
     {50.0f, "Chain it: vault, sail, catch the lift, line up the next terrace.", false},
@@ -1198,11 +1256,11 @@ static Trig gTrigsAscent[] = {
     {372.0f, "The crown column: vault it, PERFECT slam, and the boing throws you to the sky terrace.", false},
     {392.0f, "SKYHAVEN. Terrace to terrace on the sail - and mind the red mills.", false},
     {462.0f, "Half the kingdom below you. The great mill crowns the climb east.", false},
-    {530.0f, "The crown mill. A bone bridge leads into the twilight.", false},
-    {543.0f, "THE BONEWOOD. The Springheart waits at the grove gate. One red bail. No more.", false},
-    {560.0f, "Chain wallsprings. Fall in FAST, spring out BIG.", false},
-    {598.0f, "The Drum only answers a PERFECT slam. TAP shift at the last blink.", false},
-    {606.0f, "The dead stalk still breathes. HOLD shift off the lip and catch its lift.", false},
+    {528.0f, "The crown mill. The east wind DIES here - ride the last breath west.", false},
+    {541.0f, "THE BONEWOOD. No floor. The whole realm below. The Springheart waits.", false},
+    {560.0f, "Chain wallsprings. Fall in FAST, spring out BIG. Don't look down. (Look down.)", false},
+    {598.0f, "The Drum only answers a PERFECT slam. SHIFT at the last blink.", false},
+    {606.0f, "The dead stalk still breathes. Hold SPACE off the lip and catch its lift.", false},
     {640.0f, "The Hollow Bone. Forty meters of wallsprings over everything you've climbed.", false},
     {664.0f, "The crown. One vault. One bounce. One star.", false},
 };
@@ -1226,7 +1284,7 @@ static void GoToLevel(int lv){
     pl.pos = gSpawn; pl.apexY = gSpawn.y;
     gWon = false; gWonMenu = false; gTime = 0; gTimerStarted = false;
     gCoinCount = 0; gCoinCombo = 0; gCoinPops.clear();
-    gBoostT = 0; gUnlockCine = 0;
+    gBoostT = 0; gUnlockCine = 0; gSlamCharges = 0;
     SetLevelUnlocks(-1.0f);            // fresh entry: the shrine here re-arms its cinematic
     ApplyLevelMeta();
     gMsgs.clear();
@@ -1260,7 +1318,7 @@ static bool EdCheck(void){
         SaveLevelFileTo(pa);
         solids.clear(); decor.clear(); gWebAnchors.clear(); gCoins.clear(); gSpores.clear();
         gShrines.clear(); gMotes.clear(); gUpdrafts.clear(); gWindmills.clear();
-        gBanners.clear(); gPinwheels.clear();     // wipe, then reload from the file
+        gBanners.clear(); gPinwheels.clear(); gThunders.clear();   // wipe, then reload from the file
         LoadLevelFileFrom(pa);
         bool cOk = cs==(int)solids.size() && cd==(int)decor.size() && cc==(int)gCoins.size()
                 && cw==(int)gWebAnchors.size() && cu==(int)gUpdrafts.size() && cm==(int)gWindmills.size();
@@ -1322,7 +1380,7 @@ static bool EdCheck(void){
     {
         BuildWorld(6, true);
         struct Probe { const char* name; Vector3 p; float top; };
-        static const Probe pr[9] = {
+        static const Probe pr[10] = {
             {"seam1-cloud",   {0.0f,  86, 153}, 82.0f},    // spire -> crag cloud step
             {"crag-cap",      {12,    95, 210}, 80.0f},    // the hanging meadow
             {"shelf-1",       {0.38f, 95, 204.6f}, 85.0f}, // first spiral shelf
@@ -1330,11 +1388,12 @@ static bool EdCheck(void){
             {"mesa-hop",      {104,  307, 215}, 304.0f},   // hop isle under the rim
             {"mesa-mouth",    {104,  320, 240}, 310.0f},   // canyon walk-on
             {"skyhaven-P0",   {104,  395, 522}, 387.0f},   // the skysail terrace
-            {"bone-rim",      {236,  550, 560}, 540.0f},   // off the bone bridge
-            {"star-cap",      {248,  680, 760}, 668.0f},   // the final red cap
+            {"wind-rest",     {166,  510, 519}, 504.0f},   // the last-wind breath of stone
+            {"bone-gate",     {104,  548, 545}, 540.0f},   // the floating Gate of Bones
+            {"star-cap",      {112,  680, 362}, 668.0f},   // the final red cap, over the canyon
         };
         bool sOk = true;
-        for (int i=0;i<9;i++){
+        for (int i=0;i<10;i++){
             float g = GroundTopBelow(pr[i].p);
             bool ok = fabsf(g - pr[i].top) < 0.8f;
             if (lf) fprintf(lf, "ascent seam %-12s ground %.2f expect %.2f  %s\n",
@@ -1456,9 +1515,12 @@ int main(int argc, char** argv){
             EditorUpdate(dt);
         } else if (!gPaused && gFlyMode){                 // inspect the level, no gameplay
             FlyUpdate(dt);
-        } else if (!gPaused && gUnlockCine > 0){          // frozen in the unlock cinematic
+        } else if (!gPaused && gUnlockCine > 0){
+            // the unlock cinematic: input locks, but your MOMENTUM lives on -
+            // the whole thing plays out in slow-mo around whatever you were
+            // doing (grab a shrine mid-flight and the flight continues)
             float el = CINE_DUR - gUnlockCine;
-            pl.vel = {0,0,0}; pl.charging = false; pl.slamming = false; pl.webSwinging = false;
+            PlayerUpdate(dt, true);
             if (el > 0.4f && el < 1.9f && GetRandomValue(0,100) < 55){   // sparkles rise from the bloom
                 float a = frnd(0,6.283f), rr = frnd(0.3f,1.3f);
                 spawnPart(gUnlockCinePos + (Vector3){cosf(a)*rr, frnd(-0.3f,0.7f), sinf(a)*rr},
@@ -1479,13 +1541,14 @@ int main(int argc, char** argv){
 
             if (gLevel == 6){                          // the weather lives in bands up here
                 float ay = pl.pos.y;
-                gAirWind = (ay > 380 && ay < 545)? (Vector3){4.0f, 0, 1.6f}      // Skyhaven's easterly
-                         : (ay >= 545)?            (Vector3){1.2f, 0, 0.5f}      // a twilight breath
+                gAirWind = (ay > 380 && ay < 535)? (Vector3){4.0f, 0, 1.6f}      // Skyhaven's easterly
+                         : (ay >= 535)?            (Vector3){-0.9f, 0, -0.35f}   // the LAST WIND turns west
                          :                         (Vector3){0, 0, 0};
             }
             PlayerUpdate(dt, false);
             UpdateCoins(dt);
             UpdateSpores(dt);
+            UpdateThunders(dt);
             UpdateShrines();
             UpdateStreaks(dt);
             for (auto& wa : gWebAnchors) wa.wilt = fmaxf(0.0f, wa.wilt - dt);

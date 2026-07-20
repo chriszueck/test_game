@@ -66,6 +66,8 @@ static bool SaveLevelFileTo(const char* path){
     for (const Mote& m : gMotes)
         fprintf(f, "mote %d %.3f %.3f %.3f %.3f %.3f %d %d %d %d\n",
                 m.grp, m.p.x, m.p.y, m.p.z, m.r, m.spd, m.c.r, m.c.g, m.c.b, m.c.a);
+    for (const Thunder& th : gThunders)
+        fprintf(f, "thun %d %d %.3f %.3f %.3f\n", th.grp, th.amount, th.p.x, th.p.y, th.p.z);
     fclose(f);
     return true;
 }
@@ -169,6 +171,11 @@ static bool LoadLevelFileFrom(const char* path){
                    &m.grp, &m.p.x, &m.p.y, &m.p.z, &m.r, &m.spd, &r, &g, &b, &a);
             m.c = {(unsigned char)r,(unsigned char)g,(unsigned char)b,(unsigned char)a};
             gMotes.push_back(m);
+        }
+        else if (!strcmp(tag, "thun")){
+            Thunder th{};
+            sscanf(line, "thun %d %d %f %f %f", &th.grp, &th.amount, &th.p.x, &th.p.y, &th.p.z);
+            gThunders.push_back(th);
         }
     }
     fclose(f);

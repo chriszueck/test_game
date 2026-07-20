@@ -222,8 +222,6 @@ static void LoadGfx(void){
     gLocFogD = GetShaderLocation(gToon, "fogDensity");
     Vector3 sun = Vector3Normalize((Vector3){-0.45f,-1.0f,-0.35f});
     SetShaderValue(gToon, gLocSun, &sun, SHADER_UNIFORM_VEC3);
-    float fogd = 0.0022f;                          // the tower must read from the meadow
-    SetShaderValue(gToon, gLocFogD, &fogd, SHADER_UNIFORM_FLOAT);
     LoadTextures();
     gBakeMat = LoadMaterialDefault();
     gBakeMat.shader = gToon;
@@ -238,6 +236,10 @@ static void GfxFrame(Vector3 camPos){
     SkyAt(camPos.y);                              // the sky climbs with you
     float fogc[3] = { gSkyFog.r/255.0f, gSkyFog.g/255.0f, gSkyFog.b/255.0f };
     SetShaderValue(gToon, gLocFogC, fogc, SHADER_UNIFORM_VEC3);
+    // the air THINS as you climb: cozy fog in the meadow, crystal at the
+    // summit - so the floorless finale really overlooks the whole realm
+    float fogd = lerpf(0.0022f, 0.0011f, clampf((camPos.y - 240.0f)/340.0f, 0, 1));
+    SetShaderValue(gToon, gLocFogD, &fogd, SHADER_UNIFORM_FLOAT);
 }
 
 // one generic toon draw: model, position, scale, single-axis rotation, tex+tint

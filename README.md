@@ -29,19 +29,26 @@ power at a shrine — and every realm above demands everything you've learned:
    turbo hops before the glow dies.
 4. **The HANGING MESA** (310–388 m) — an entire quarried canyon floating in
    the sky, waterfall pouring off its rim into nothing. The **Thunder
-   Shrine** at the mouth grants the **SLAM**. Red bounce-shafts, arches that
-   bite overshoots, the two-bloom river crossing, the lying ledges of the
-   Throat — then a PERFECT slam boings you off the crown column.
+   Shrine** at the mouth grants the **SLAM** — but the mega-boing runs on
+   **THUNDERSEEDS**, storm-fruit growing on every diving board: each
+   amplified bounce spends one, and they grow only where they're needed.
+   Red bounce-shafts, arches that bite overshoots, the two-bloom river
+   crossing, the lying ledges of the Throat — then a PERFECT slam boings you
+   off the crown column.
 5. **Skyhaven** (387–536 m) — the windmill kingdom above the rim. The
    **Skysail shrine** on the first terrace unfurls the **SKYSAIL**: vault,
    glide, catch updrafts, thread the red blade-gates, twelve terraces to the
-   great mill's crown.
-6. **The BONEWOOD** (540–673 m) — a twilight grove of petrified giants on the
-   bone plateau, over everything. The **Springheart** wakes the
+   great mill's crown — where the east wind dies, and one last westward
+   breath carries you to the grove.
+6. **The BONEWOOD** (540–673 m) — a twilight grove of petrified giants with
+   **no floor at all**, hanging over the canyon you conquered, every trunk
+   adrift on its own dead roots. The climb runs back south over the realm —
+   the whole world is your view, and your drop. The **Springheart** wakes the
    **WALLSPRING**, and every power you own becomes a gate: wallspring
    chimneys, a web-only crossing, a PERFECT-slam drum, a 42 m sail glide on a
    dead stalk's last breath, spore-turbo ember shelves — then the Hollow
-   Bone, one vault, one bounce, one star.
+   Bone, one vault, one bounce, one star, and 360 m of open twilight between
+   you and the river below.
 
 **Falls don't kill you. They just put you back.** Sometimes 600 meters back.
 Steer for the reds, the crag, the mesa floor, the bone plateau — every lucky
@@ -59,14 +66,17 @@ Run **`ShroomVault.exe`**.
 | release in the **bright green** | **PERFECT** (+15%). Past it: **FOUL** |
 | **sprint into the plant** | run speed becomes height |
 | **hold RMB** (or tap F) | swing from a glowing **web bloom** — *Weaver's Bloom, 149 m* |
-| **SHIFT / E** mid-air | **SLAM** — dive. Perfect-slam a red: the boing returns MORE — *Thunder Shrine, 310 m* |
-| **hold SHIFT** mid-air | **SKYSAIL** — glide. W dive, S flare, A/D steer — *Skysail shrine, 387 m* |
+| **SHIFT / E** mid-air | **SLAM** — dive. A **THUNDERSEED** charge makes the bounce return MORE — *Thunder Shrine, 310 m* |
+| **hold SPACE** mid-air | **SKYSAIL** — glide. W dive, S flare, A/D steer — *Skysail shrine, 387 m* |
 | **tap LMB** on a wall mid-air | **WALLSPRING** — kick off; fall in fast = spring out big — *Springheart, 540 m* |
 | R (hold 1s) | rage-reset to the meadow |
 | ESC | pause · M mute · F11 fullscreen · Q (paused) save & quit |
 
-Once both slam and sail are yours, SHIFT does both: **tap = slam, hold =
-sail** (E always slams instantly).
+Thunderseeds show as amber bolts under the crosshair; out of thunder, a
+slammed red answers with its plain bounce. Grounded SPACE still charges the
+vault — airborne, a fresh SPACE press is the canopy (LMB keeps the buffered
+air-charge). Shrine cinematics no longer stop you: the power flows in around
+whatever your momentum was doing, in slow motion.
 
 **The one rule of the vault:** you must be on solid ground when you release —
 though a release a moment before landing is buffered and fires on touchdown.

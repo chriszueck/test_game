@@ -56,7 +56,6 @@ static float SLAM_WIN    = 0.30f;   // pressed within this of impact = PERFECT
 static float SLAM_K_GOOD = 0.88f;   // slammed, but early (extra dive speed compensates)
 static float SLAM_K_PERF = 1.15f;   // slammed at the last blink
 static float SLAM_STUN   = 0.35f;   // slamming solid rock hurts
-static float SLAM_TAP    = 0.22f;   // slam+sail both owned: SHIFT tapped shorter than this = SLAM, held = SAIL
 static float HITSTOP_VAULT   = 0.05f;  // impact-frame slow-mo on plant
 static float HITSTOP_PERFECT = 0.11f;
 // THE WALLSPRING (Bonewood): tap the vault key mid-air against a wall and the
@@ -134,6 +133,16 @@ static float gBoostT = 0;                  // boost time remaining
 static float BOOST_DUR   = 7.0f;     // how long a spore lasts
 static float BOOST_VY    = 5.5f;     // extra launch speed while boosted
 static float SPORE_CD    = 5.0f;     // regrow time after pickup
+
+// THE SLAM runs on THUNDERSEEDS: storm-fruit picked up along the slam routes.
+// Each AMPLIFIED slam-bounce spends one charge - out of thunder, a red cap
+// answers with its plain bounce. So the mega-boing exists exactly where the
+// level hands it to you, and can't cheese the rest of the realm. The dive
+// itself stays free (it's also a movement tool).
+struct Thunder { Vector3 p; int amount; float cd; int grp; };
+static std::vector<Thunder> gThunders;
+static int   gSlamCharges = 0;             // thunder in your pole right now
+static float THUNDER_CD   = 7.0f;          // seed regrow after pickup
 
 // mechanics unlock as the worlds introduce them (persisted in the save)
 static bool gUnlockWeb  = false;           // won at the Weaver's Bloom (Megashroom)

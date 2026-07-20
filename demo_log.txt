@@ -341,34 +341,34 @@ t=34.0 pos=(  0.00, 42.40, 55.00) vel=(  0.0,-18.0,  0.0) gnd=0 chg=0 web=0 vaul
 t=34.1 pos=(  0.00, 40.35, 55.00) vel=(  0.0,-22.6,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
 t=34.2 pos=(  0.00, 37.84, 55.00) vel=(  0.0,-27.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
 t=34.3 pos=(  0.00, 34.86, 55.00) vel=(  0.0,-31.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=34.4 pos=(  0.00, 34.16, 55.00) vel=(  0.0, -7.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=34.5 pos=(  0.00, 33.13, 55.00) vel=(  0.0,-13.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=34.6 pos=(  0.00, 31.47, 55.00) vel=(  0.0,-19.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=34.7 pos=(  0.00, 32.46, 55.00) vel=(  0.0, 22.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=34.8 pos=(  0.00, 34.52, 55.00) vel=(  0.0, 19.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=34.9 pos=(  0.00, 36.24, 55.00) vel=(  0.0, 15.6,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.0 pos=(  0.00, 37.62, 55.00) vel=(  0.0, 12.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.1 pos=(  0.00, 38.65, 55.00) vel=(  0.0,  8.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.2 pos=(  0.00, 39.35, 55.00) vel=(  0.0,  5.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.3 pos=(  0.00, 39.71, 55.00) vel=(  0.0,  2.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.4 pos=(  0.00, 39.72, 55.00) vel=(  0.0, -1.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.5 pos=(  0.00, 39.29, 55.00) vel=(  0.0, -6.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.6 pos=(  0.00, 38.40, 55.00) vel=(  0.0,-11.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.7 pos=(  0.00, 37.06, 55.00) vel=(  0.0,-15.6,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.8 pos=(  0.00, 35.25, 55.00) vel=(  0.0,-20.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=35.9 pos=(  0.00, 32.98, 55.00) vel=(  0.0,-24.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.0 pos=(  0.00, 31.27, 55.00) vel=(  0.0, 21.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.1 pos=(  0.00, 33.26, 55.00) vel=(  0.0, 18.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.2 pos=(  0.00, 34.91, 55.00) vel=(  0.0, 15.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.3 pos=(  0.00, 36.22, 55.00) vel=(  0.0, 11.6,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.4 pos=(  0.00, 37.19, 55.00) vel=(  0.0,  8.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.5 pos=(  0.00, 37.82, 55.00) vel=(  0.0,  4.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.6 pos=(  0.00, 38.11, 55.00) vel=(  0.0,  1.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.7 pos=(  0.00, 38.04, 55.00) vel=(  0.0, -2.7,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.8 pos=(  0.00, 37.52, 55.00) vel=(  0.0, -7.3,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=36.9 pos=(  0.00, 36.53, 55.00) vel=(  0.0,-11.9,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-t=37.0 pos=(  0.00, 35.09, 55.00) vel=(  0.0,-16.5,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
-SUMMARY maxY=87.87 vaults=0 fouls=0 falls=0 final=(0.0,35.1,55.0)
+t=34.4 pos=(  0.00, 31.35, 55.00) vel=(  0.0,-38.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=34.5 pos=(  0.00, 34.62, 55.00) vel=(  0.0, 41.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=34.6 pos=(  0.00, 38.55, 55.00) vel=(  0.0, 37.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=34.7 pos=(  0.00, 42.15, 55.00) vel=(  0.0, 34.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=34.8 pos=(  0.00, 45.40, 55.00) vel=(  0.0, 31.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=34.9 pos=(  0.00, 48.31, 55.00) vel=(  0.0, 27.6,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.0 pos=(  0.00, 50.88, 55.00) vel=(  0.0, 24.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.1 pos=(  0.00, 53.12, 55.00) vel=(  0.0, 20.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.2 pos=(  0.00, 55.01, 55.00) vel=(  0.0, 17.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.3 pos=(  0.00, 56.56, 55.00) vel=(  0.0, 14.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.4 pos=(  0.00, 57.77, 55.00) vel=(  0.0, 10.6,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.5 pos=(  0.00, 58.65, 55.00) vel=(  0.0,  7.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.6 pos=(  0.00, 59.18, 55.00) vel=(  0.0,  3.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.7 pos=(  0.00, 59.37, 55.00) vel=(  0.0,  0.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.8 pos=(  0.00, 59.18, 55.00) vel=(  0.0, -4.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=35.9 pos=(  0.00, 58.53, 55.00) vel=(  0.0, -8.6,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.0 pos=(  0.00, 57.41, 55.00) vel=(  0.0,-13.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.1 pos=(  0.00, 55.84, 55.00) vel=(  0.0,-17.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.2 pos=(  0.00, 53.81, 55.00) vel=(  0.0,-22.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.3 pos=(  0.00, 51.32, 55.00) vel=(  0.0,-27.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.4 pos=(  0.00, 48.36, 55.00) vel=(  0.0,-31.6,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.5 pos=(  0.00, 44.95, 55.00) vel=(  0.0,-36.2,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.6 pos=(  0.00, 41.08, 55.00) vel=(  0.0,-40.8,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.7 pos=(  0.00, 36.75, 55.00) vel=(  0.0,-45.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.8 pos=(  0.00, 31.95, 55.00) vel=(  0.0,-50.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=36.9 pos=(  0.00, 33.96, 55.00) vel=(  0.0, 37.4,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+t=37.0 pos=(  0.00, 37.51, 55.00) vel=(  0.0, 34.0,  0.0) gnd=0 chg=0 web=0 vaults=0 fouls=0
+SUMMARY maxY=87.87 vaults=0 fouls=0 falls=0 final=(0.0,37.5,55.0)
 WALLSPRING start=10.0 peak=37.1 climbed=27.1 (chain up the split trunk)
-SHIFTHOLD=SAIL OK  sailed=1 slammed=0 enterY=65.9 exitY=77.6 boughY=87.5 (updraft must lift the glide)
-SHIFTTAP=SLAM OK  slammed=1 dt=0.01 bounced=1 apexAfter=39.8 (release converts to the dive)
+SPACEHOLD=SAIL OK  sailed=1 slammed=0 enterY=65.9 exitY=77.6 boughY=87.5 (updraft must lift the glide)
+SHIFT=SLAM OK  slammed=1 dt=0.01 bounced=1 apexAfter=59.4 thunderLeft=2 (press dives, a seed fuels the boing)

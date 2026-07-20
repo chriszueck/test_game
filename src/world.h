@@ -58,27 +58,34 @@ struct GrpScope {
 
 // THE GREAT ASCENT: level 6 stacks every world into one continuous climb.
 // gBOff shifts every primitive a zone builder emits (applied in the LEAF
-// adders only, so composite builders never double-offset). gMega makes the
-// builders skip their standalone-only parts (own ground slab, warp pipe,
-// horizon dressing) - BuildAscent provides the connected versions.
+// adders only, so composite builders never double-offset). gBFlip mirrors
+// local z first (the Bonewood is built flipped so its climb faces back over
+// the realm). gMega makes the builders skip their standalone-only parts (own
+// ground slab, warp pipe, horizon dressing) - BuildAscent connects them.
 static Vector3 gBOff = {0,0,0};
 static bool    gMega = false;
+static bool    gBFlip = false;
+static inline Vector3 bofs(Vector3 p){ if (gBFlip) p.z = -p.z; return p + gBOff; }
 static Solid* addBox(Vector3 mn, Vector3 mx, int surf, bool bouncy=false, bool vis=true){
-    Solid s{}; s.isCyl=false; s.mn=mn+gBOff; s.mx=mx+gBOff; s.surf=surf; s.bouncy=bouncy; s.visible=vis;
+    Vector3 a = bofs(mn), b = bofs(mx);                 // a mirrored box swaps its z faces
+    Solid s{}; s.isCyl=false;
+    s.mn = { fminf(a.x,b.x), fminf(a.y,b.y), fminf(a.z,b.z) };
+    s.mx = { fmaxf(a.x,b.x), fmaxf(a.y,b.y), fmaxf(a.z,b.z) };
+    s.surf=surf; s.bouncy=bouncy; s.visible=vis;
     s.grp=grpUse();
     solids.push_back(s); return &solids.back();
 }
 static Solid* addCyl(Vector3 base, float rad, float hgt, int surf, bool bouncy=false, bool vis=true){
-    Solid s{}; s.isCyl=true; s.base=base+gBOff; s.rad=rad; s.hgt=hgt;
+    Solid s{}; s.isCyl=true; s.base=bofs(base); s.rad=rad; s.hgt=hgt;
     s.mn={s.base.x-rad, s.base.y, s.base.z-rad}; s.mx={s.base.x+rad, s.base.y+hgt, s.base.z+rad};
     s.surf=surf; s.bouncy=bouncy; s.visible=vis;
     s.grp=grpUse();
     solids.push_back(s); return &solids.back();
 }
 static void addDecor(int kind, Vector3 pos, Vector3 scale, Color col, int tex=TX_WHITE, float rotY=0){
-    decor.push_back({kind, pos+gBOff, scale, col, tex, rotY, grpUse()});
+    decor.push_back({kind, bofs(pos), scale, col, tex, gBFlip? -rotY : rotY, grpUse()});
 }
-static void addWebAnchor(Vector3 pos, float radius=3.0f){ gWebAnchors.push_back({pos+gBOff, radius, 0, grpUse()}); }
+static void addWebAnchor(Vector3 pos, float radius=3.0f){ gWebAnchors.push_back({bofs(pos), radius, 0, grpUse()}); }
 
 // mushroom cap only: collision cylinder + toadstool silhouette
 // (overhanging rim lip + domed crown + pale gilled underside + spots)
@@ -178,7 +185,7 @@ static void addFlag(Vector3 groundPos, Color col){
 // spinning collectible coins trace the routes (drawn + collected in main.cpp)
 struct Coin { Vector3 p; bool taken; int grp; };
 static std::vector<Coin> gCoins;
-static void addCoin(float x, float y, float z){ gCoins.push_back({{x+gBOff.x, y+gBOff.y, z+gBOff.z}, false, grpUse()}); }
+static void addCoin(float x, float y, float z){ gCoins.push_back({bofs({x,y,z}), false, grpUse()}); }
 // hanging pennant banner on a wall face (face normal along -Z; rotY to reorient)
 static void addBanner(Vector3 topCenter, Color col, float w=1.5f, float h=2.6f){
     GrpScope _g;
@@ -209,40 +216,46 @@ static void addWarpPipe(Vector3 groundPos, Color flagCol){
     GrpScope _g;
     gWarpGrp = gGrp;
     addPipe(groundPos, 2.0f, 2.6f);
-    gWarpTop = groundPos + gBOff + (Vector3){0, 2.6f, 0};
+    gWarpTop = bofs(groundPos) + (Vector3){0, 2.6f, 0};
     addFlag({groundPos.x + 2.9f, groundPos.y, groundPos.z}, flagCol);
     addDecor(D_SPHERE, {groundPos.x, groundPos.y + 3.6f, groundPos.z},
              {0.30f,0.30f,0.30f}, C_GOLD);         // beacon ball over the mouth
 }
 static void addSpore(float x, float y, float z){
     GrpScope _g;
-    gSpores.push_back({{x+gBOff.x, y+gBOff.y, z+gBOff.z}, 0, gGrp});
+    gSpores.push_back({bofs({x,y,z}), 0, gGrp});
     addDecor(D_CYL, {x, y-1.1f, z}, {0.09f, 1.0f, 0.09f}, {96,180,84,255});   // stem (orb drawn live)
+}
+// THUNDERSEED: a storm-fruit that loads the pole with n slam-bounces
+static void addThunder(float x, float y, float z, int n){
+    GrpScope _g;
+    gThunders.push_back({bofs({x,y,z}), n, 0, gGrp});
+    addDecor(D_CYL, {x, y-1.0f, z}, {0.11f, 0.9f, 0.11f}, {92,70,52,255}, TX_FIBER);   // gnarled stem
 }
 // power shrine: touch it and a new mechanic is yours (orb drawn live)
 static void addShrine(Vector3 groundPos, int type){
     GrpScope _g;
-    gShrines.push_back({groundPos + gBOff + (Vector3){0, 1.7f, 0}, type, gGrp});
+    gShrines.push_back({bofs(groundPos) + (Vector3){0, 1.7f, 0}, type, gGrp});
     addCyl(groundPos, 1.2f, 0.9f, S_STONE);
     addDecor(D_CYL, {groundPos.x, groundPos.y + 0.88f, groundPos.z}, {1.35f,0.14f,1.35f}, C_GOLD);
     addDecor(D_CYL, {groundPos.x, groundPos.y - 0.02f, groundPos.z}, {1.6f,0.1f,1.6f}, C_STONE_B, TX_STONE);
 }
-static void addMote(Vector3 p, Color c, float r, float spd){ gMotes.push_back({p+gBOff, c, r, spd, grpUse()}); }
+static void addMote(Vector3 p, Color c, float r, float spd){ gMotes.push_back({bofs(p), c, r, spd, grpUse()}); }
 
 // ---- SKYHAVEN builders ----------------------------------------------------
 static void addUpdraft(Vector3 base, float rad, float hgt, float str=32.0f){
-    gUpdrafts.push_back({base+gBOff, rad, hgt, str, grpUse()});
+    gUpdrafts.push_back({bofs(base), rad, hgt, str, grpUse()});
 }
 static void addWindmill(Vector3 pos, float rad, float tilt, float spd, int blades, Color col, int hazard=0){
-    gWindmills.push_back({pos+gBOff, rad, tilt, spd, blades, col, hazard, grpUse()});
+    gWindmills.push_back({bofs(pos), rad, tilt, spd, blades, col, hazard, grpUse()});
 }
 static void addStreamer(Vector3 top, float len, float w, Color col){
-    gBanners.push_back({top+gBOff, len, w, col, frnd(0,6.283f), grpUse()});
+    gBanners.push_back({bofs(top), len, w, col, frnd(0,6.283f), grpUse()});
 }
 static void addPinwheel(Vector3 pos, float rad, float spd, Color a, Color b){
     GrpScope _g;
     addDecor(D_CYL, {pos.x, pos.y-1.3f, pos.z}, {0.07f, 1.3f, 0.07f}, C_WOOD);   // pole
-    gPinwheels.push_back({pos+gBOff, rad, spd, a, b, gGrp});
+    gPinwheels.push_back({bofs(pos), rad, spd, a, b, gGrp});
 }
 // a floating sky-stone platform (walkable disc + tapered underside + rim)
 static void addSkyPlat(float x, float z, float top, float r){
@@ -952,8 +965,11 @@ static void BuildGorge(void){
     addWarpPipe({-8,0,-34}, {80,220,90,255});      // home to the castle
     addBox({-15,0,-12},{15,0.08f,238}, S_SAND);    // sandy canyon floor
 
-    // THE THUNDER SHRINE: touch it and the SLAM is yours, forever
+    // THE THUNDER SHRINE: touch it and the SLAM is yours, forever...
     addShrine({0,0,-16}, 1);
+    // ...but the BOING runs on THUNDERSEEDS. Every diving board grows its own
+    // crop - enough for that shaft, none to smuggle out of the canyon.
+    addThunder(0, 1.2f, -10, 3);
 
     // ---- canyon walls: varied skyline + sandstone strata --------------------
     {
@@ -1002,20 +1018,24 @@ static void BuildGorge(void){
     ledge(false, 10, 2, 24);                        // L1 west + long walk shelf
     // ---- act 2: THE STEPS (four shafts, windows tighten) ---------------------
     board(false, 10, 24, 28);
+    addThunder(-10, 11.3f, 26, 3);
     addShroom({0,0,28}, 5.0f, 3.3f, true);          // C1: drop 5, exit +13, open sky
     ledge(true, 18, 30, 44);                        // E1
     addCoin(0, 19.5f, 28);
     board(true, 18, 44, 48);
+    addThunder(10, 19.3f, 46, 3);
     addShroom({0,0,48}, 6.0f, 2.8f, true);          // C2: drop 12, window 18..24 (GOOD)
     roof(false, 30, 45, 51);
     ledge(false, 24, 52, 64);                       // E2
     addCoin(0, 26.5f, 48);
     board(false, 24, 64, 68);
+    addThunder(-10, 25.3f, 66, 2);
     addShroom({0,0,68}, 7.0f, 2.4f, true);          // C3: drop 17, window 26..31 (PERFECT, small)
     roof(true, 38, 65, 71);
     ledge(true, 33, 70, 82);                        // E3
     addCoin(0, 35.5f, 68);
     board(true, 33, 86, 90);
+    addThunder(10, 34.3f, 88, 2);
     addShroom({0,0,90}, 20.0f, 2.9f, true);         // C4 giant: drop 13, window 23..27 (mixed)
     roof(false, 47, 87, 93);
     ledge(false, 43, 92, 100);                      // E4 = the crossing porch
@@ -1027,16 +1047,19 @@ static void BuildGorge(void){
     ledge(true, 40, 126, 134);                      // E5
     // ---- act 4: THE ORGAN PIPES (three shafts, alternating gates) ------------
     board(true, 40, 138, 142);
+    addThunder(10, 41.3f, 140, 2);
     addShroom({0,0,142}, 26.0f, 2.9f, true);        // O1: drop 14, window 20..26 (PERFECT-ish)
     roof(true, 52, 139, 145);
     ledge(true, 46, 146, 154);                      // E6
     addCoin(0, 49.0f, 142);
     board(true, 46, 156, 160);
+    addThunder(10, 47.3f, 158, 2);
     addShroom({0,0,160}, 30.0f, 2.4f, true);        // O2: drop 16, window 28..33 (PERFECT)
     roof(false, 63, 157, 163);
     ledge(false, 58, 162, 170);                     // E7
     addCoin(0, 60.5f, 160);
     board(false, 58, 172, 176);
+    addThunder(-10, 59.3f, 174, 2);
     addShroom({0,0,176}, 40.0f, 2.1f, true);        // O3: drop 18, window 22..26 (GOOD only!) - the pin
     roof(true, 66, 173, 179);
     ledge(true, 62, 180, 188);                      // E8
@@ -1046,6 +1069,7 @@ static void BuildGorge(void){
     ledge(true, 48, 194, 200);
     board(true, 42, 202, 206);
     addFlag({13.0f, 42, 203}, C_GOLD);
+    addThunder(9, 43.3f, 204, 2);
     addShroom({0,0,206}, 30.0f, 3.0f, true);        // the Throat cap: drop 12
     roof(false, 55, 203, 209);                      // true window 21..25
     ledge(true, 38, 202, 206);                      // fake ledge (coins, no road)
@@ -1056,6 +1080,7 @@ static void BuildGorge(void){
     addSpore(-13.5f, 52.2f, 212);
     addBox({-8,0,216},{-4,61,220}, S_STONE);        // pinnacle A (+10 boosted)
     addBox({-4,0,222},{ 4,64,230}, S_STONE);        // plateau (+3 hop)
+    addThunder(0, 65.3f, 226, 2);                   // the crown boing
     addCoin(-6, 63.0f, 218);
     addCyl({0,0,236}, 2.4f, 64.2f, S_STONE);        // the star column
     addCap(0, 236, 66.0f, 3.0f, true);              // vault over it, SLAM it, fly through the star
@@ -1315,6 +1340,19 @@ static void BuildBonewood(void){
     const Color BONE_D = {205,196,176,255};
     const Color GLOW   = {120,235,215,255};        // teal grave-lights
 
+    // in the ascent the grove has NO floor - every trunk hangs in the twilight
+    // on its own dead roots, and the realm waits far below
+    auto roots = [&](float x, float z, float r){
+        if (!gMega) return;
+        GrpScope _g;
+        addDecor(D_SPHERE, {x, -0.7f, z}, {r*1.3f, 1.2f, r*1.3f}, BONE_D, TX_FIBER);
+        for (int k=0;k<4;k++){
+            float a = k*1.57f + x*0.7f;
+            addDecor(D_CYL, {x+cosf(a)*r*0.7f, -4.4f-(k%2)*1.2f, z+sinf(a)*r*0.7f},
+                     {0.14f, 3.8f+(k%2)*1.4f, 0.14f}, {96,74,46,255}, TX_FIBER);
+        }
+    };
+
     // THE SPRINGHEART: the shrine that wakes the wallspring, right at the
     // mouth of the first chimney (type 3)
     addShrine({0,0,0}, 3);
@@ -1323,6 +1361,7 @@ static void BuildBonewood(void){
     // two bark walls 4.5 m apart; spring wall to wall all the way up
     addBox({-4.25f,0,6},{-2.25f,34,12}, S_WOOD);
     addBox({ 2.25f,0,6},{ 4.25f,34,12}, S_WOOD);
+    roots(-3.25f, 9, 2.4f); roots(3.25f, 9, 2.4f);
     addBox({-2.25f,33.3f,12},{2.25f,34,16}, S_WOOD);          // L1 exit lip
     addCoin(0,  9, 9); addCoin(0, 17, 9); addCoin(0, 25, 9); addCoin(0, 32, 9);
     addCoin(0, 35.3f, 14);
@@ -1338,17 +1377,24 @@ static void BuildBonewood(void){
     addWebAnchor({0, 45, 24});
     addWebAnchor({2, 48, 38});
     addCoin(0, 41, 24); addCoin(2, 44, 38);
-    addShroom({-6,0,30}, 6.0f, 4.2f, true);        // the ONE red bail of the grove
+    if (!gMega) addShroom({-6,0,30}, 6.0f, 4.2f, true);   // the ONE red bail of the grove
+    else {                                          // ...which floats out here
+        addCap(-6, 30, 10.0f, 4.2f, true);
+        roots(-6, 30, 3.2f);
+    }
     // P2: a snapped bone pillar (collision cyl + bone visual)
     addCyl({0,0,44}, 2.6f, 38, S_DARK, false, false);
     addDecor(D_CYL, {0,0,44}, {2.75f, 38.2f, 2.75f}, BONE, TX_FIBER);
     addDecor(D_CYL, {0,37.6f,44}, {3.0f, 0.5f, 3.0f}, BONE_D, TX_FIBER);
+    roots(0, 44, 2.9f);
     addCoin(0, 39.3f, 44);
+    addThunder(1.2f, 39.6f, 44.8f, 2);             // thunder for THE DRUM, and only the drum
 
     // ---- act 3: THE DRUM (38 -> 54, PERFECT slam only) ---------------------
     // vault off P2 over the red drum, dive, ring it at the last blink
     addCyl({0,0,55}, 2.0f, 28, S_DARK, false, false);         // drum stalk
     addDecor(D_CYL, {0,0,55}, {2.15f, 27.2f, 2.15f}, BONE, TX_FIBER);
+    roots(0, 55, 2.3f);
     addCap(0, 55, 30.0f, 2.6f, true);                          // the drum head
     addBox({-2,53.3f,58.5f},{2,54,63}, S_WOOD);                // E3: the only exit
     addCoin(0, 43, 55);                                        // mid-dive prize
@@ -1365,6 +1411,7 @@ static void BuildBonewood(void){
     addUpdraft({0, 46, 94}, 8.0f, 30.0f, 34.0f);
     addDecor(D_CYL, {0, 0, 94}, {3.4f, 42.0f, 3.4f}, BONE_D, TX_FIBER);   // the venting stump
     addDecor(D_CYL, {0, 41.6f, 94}, {3.9f, 0.6f, 3.9f}, BONE, TX_FIBER);
+    roots(0, 94, 3.7f);
     addCoin(0, 58, 94); addCoin(0, 68, 94);
     // T4: the landing bough
     addCyl({0,54.4f,118}, 3.0f, 1.6f, S_WOOD);
@@ -1393,6 +1440,7 @@ static void BuildBonewood(void){
     // the crown: a lone red cap on the tallest snapped bone - bounce through
     addCyl({8,0,168}, 2.0f, 126, S_DARK, false, false);
     addDecor(D_CYL, {8,0,168}, {2.2f, 126.2f, 2.2f}, BONE, TX_FIBER);
+    roots(8, 168, 2.4f);
     addCap(8, 168, 128.0f, 2.8f, true);
     addCoin(8, 130.4f, 168);
 
@@ -1412,22 +1460,32 @@ static void BuildBonewood(void){
                      {r*0.35f, r*0.9f, r*0.35f}, BONE_D, TX_FIBER);
         }
     };
-    titan(-52,  40, 46, 6.5f,  3.0f);
-    titan( 55,  90, 62, 8.0f, -4.0f);
-    titan(-48, 140, 38, 5.0f,  2.0f);
-    titan( 60, 190, 70, 9.0f, -3.0f);
-    titan(-58, 220, 52, 7.0f,  4.0f);
-    // the fallen one: a colossal log the road follows (decor mound)
-    addDecor(D_SPHERE, {-24, 2.0f, 92}, {9.0f, 4.2f, 34.0f}, (Color){222,214,196,255}, TX_FIBER);
-    addDecor(D_SPHERE, {-24, 3.0f, 74}, {6.5f, 5.5f, 7.5f},  BONE_D, TX_FIBER);
-    // teal grave-lights along the route bases (pure glow decor)
-    {
+    if (!gMega){
+        titan(-52,  40, 46, 6.5f,  3.0f);
+        titan( 55,  90, 62, 8.0f, -4.0f);
+        titan(-48, 140, 38, 5.0f,  2.0f);
+        titan( 60, 190, 70, 9.0f, -3.0f);
+        titan(-58, 220, 52, 7.0f,  4.0f);
+        // the fallen one: a colossal log the road follows (decor mound)
+        addDecor(D_SPHERE, {-24, 2.0f, 92}, {9.0f, 4.2f, 34.0f}, (Color){222,214,196,255}, TX_FIBER);
+        addDecor(D_SPHERE, {-24, 3.0f, 74}, {6.5f, 5.5f, 7.5f},  BONE_D, TX_FIBER);
+        // teal grave-lights along the route bases (pure glow decor)
         float gx[8] = {-3, 4,  -8,  3, -4,  4, -3, 10};
         float gz[8] = { 3, 5,  30, 44, 55, 94, 148, 166};
         for (int i=0;i<8;i++){
             addDecor(D_CYL, {gx[i], 0, gz[i]}, {0.14f, 0.9f, 0.14f}, (Color){186,200,190,255}, TX_FIBER);
             addDecor(D_SPHERE, {gx[i], 1.05f, gz[i]}, {0.5f, 0.36f, 0.5f}, GLOW);
             addDecor(D_SPHERE, {gx[i], 1.05f, gz[i]}, {0.9f, 0.6f, 0.9f}, (Color){120,235,215,60});
+        }
+    } else {
+        // floorless grove: grave-lights ride the perches themselves
+        float gx[6] = {0, 2, 0,  0,  8, 8};
+        float gy[6] = {34, 38, 54, 56, 126, 84.6f};
+        float gz[6] = {14, 44, 61, 118, 157, 148};
+        for (int i=0;i<6;i++){
+            addDecor(D_CYL, {gx[i], gy[i], gz[i]}, {0.14f, 0.9f, 0.14f}, (Color){186,200,190,255}, TX_FIBER);
+            addDecor(D_SPHERE, {gx[i], gy[i]+1.05f, gz[i]}, {0.5f, 0.36f, 0.5f}, GLOW);
+            addDecor(D_SPHERE, {gx[i], gy[i]+1.05f, gz[i]}, {0.9f, 0.6f, 0.9f}, (Color){120,235,215,60});
         }
     }
     // spirit motes drifting the whole climb (cool, not warm - this is a grave)
@@ -1437,15 +1495,24 @@ static void BuildBonewood(void){
     addMote({ 0, 70, 118}, {190,225,255,255}, 3.4f, 0.5f);
     addMote({ 0, 105, 157}, {150,240,225,255}, 2.8f, 0.6f);
     addMote({ 8, 126, 168}, {255,240,180,255}, 3.0f, 0.65f);
-    // pale bone-button families in the grass
-    addShroomPatch(-16, 0, 12, 6, 3.2f);
-    addShroomPatch( 20, 0, 40, 5, 2.8f);
-    addShroomPatch(-30, 0, 60, 6, 3.6f);
-    // mist banks pooling between the titans
-    for (int k=0;k<7;k++){
-        float a = k*0.9f;
-        addDecor(D_SPHERE, {sinf(a)*44, 1.4f, 60+cosf(a)*52+60},
-                 {frnd(9,15), frnd(1.6f,2.6f), frnd(9,15)}, (Color){222,232,236,90});
+    if (!gMega){
+        // pale bone-button families in the grass
+        addShroomPatch(-16, 0, 12, 6, 3.2f);
+        addShroomPatch( 20, 0, 40, 5, 2.8f);
+        addShroomPatch(-30, 0, 60, 6, 3.6f);
+        // mist banks pooling between the titans
+        for (int k=0;k<7;k++){
+            float a = k*0.9f;
+            addDecor(D_SPHERE, {sinf(a)*44, 1.4f, 60+cosf(a)*52+60},
+                     {frnd(9,15), frnd(1.6f,2.6f), frnd(9,15)}, (Color){222,232,236,90});
+        }
+    } else {
+        // mist rivers drifting BETWEEN the hanging bones
+        for (int k=0;k<7;k++){
+            float a = k*0.9f;
+            addDecor(D_SPHERE, {sinf(a)*26, 26 + k*13.0f, 30+cosf(a)*30+50},
+                     {frnd(8,13), frnd(1.4f,2.2f), frnd(8,13)}, (Color){212,222,232,70});
+        }
     }
     // grey-green burial hills on the horizon (standalone only)
     if (!gMega)
@@ -1467,8 +1534,10 @@ static const Vector3 OFF_SHROOM = {  0,  80, 170};
 static const Vector3 OFF_SPORE  = {102, 225, 170};
 static const Vector3 OFF_GORGE  = {104, 310, 270};
 static const Vector3 OFF_SKY    = {168, 385, 522};
-static const Vector3 OFF_BONE   = {240, 540, 592};
-static const Vector3 ASCENT_STAR = {248, 672.6f, 760};
+// the Bonewood is built z-FLIPPED at this offset: its climb runs BACK south
+// over the canyon, floorless, overlooking everything you've already earned
+static const Vector3 OFF_BONE   = {104, 540, 530};
+static const Vector3 ASCENT_STAR = {112, 672.6f, 362};
 
 // connective tissue: supports under each zone, the five seams, ground carpet
 static void BuildSeams(void){
@@ -1583,39 +1652,62 @@ static void BuildSeams(void){
     addShrine({101, 387.0f, 519}, 2);                         // THE SKYSAIL wakes here
     addCoin(104, 381.5f, 495); addCoin(104, 385.0f, 505); addCoin(107, 388.0f, 515);
 
-    // ---- seam 5: Skyhaven crown -> the bone bridge -> BONEWOOD rim ---------
-    {
-        float bx[4] = {224, 228.5f, 232.5f, 236};
-        float bz[4] = {530, 536, 542, 548};
-        float by[4] = {535.0f, 536.6f, 538.0f, 539.4f};
-        for (int i=0;i<4;i++){
-            addBox({bx[i]-1.6f, by[i]-0.8f, bz[i]-2.2f},{bx[i]+1.6f, by[i], bz[i]+2.2f}, S_WOOD);
-            addDecor(D_CYL, {bx[i]-1.5f, by[i], bz[i]}, {0.12f, 1.0f, 0.12f}, (Color){228,222,205,255}, TX_FIBER);
-            addDecor(D_CYL, {bx[i]+1.5f, by[i], bz[i]}, {0.12f, 1.0f, 0.12f}, (Color){228,222,205,255}, TX_FIBER);
-            addCoin(bx[i], by[i]+1.3f, bz[i]);
-        }
-        addFlag({236, 540, 555}, {228,222,205,255});          // zone flag: the grove
-    }
-    // the bone plateau: one colossal fossil slab in the twilight
-    addBox({165, 532, 552},{315, 540, 832}, S_SKYSTONE);
-    addDecor(D_CUBE, {240, 540.04f, 692}, {150, 0.05f, 280}, (Color){205,199,215,255});  // slate dusk cast
-    for (int f=0; f<2; f++){                                   // fossil bands on the cliff faces
-        float fx = f? 315.1f : 164.9f;
-        addDecor(D_CUBE, {fx, 534.6f, 692}, {0.12f, 0.7f, 279}, (Color){205,196,176,255});
-        addDecor(D_CUBE, {fx, 537.6f, 692}, {0.12f, 0.9f, 279}, (Color){186,178,196,255});
-    }
-    addDecor(D_CUBE, {240, 534.6f, 552.1f}, {75, 0.7f, 0.1f}, (Color){205,196,176,255});
-    addDecor(D_CUBE, {240, 537.6f, 552.1f}, {75, 0.9f, 0.1f}, (Color){186,178,196,255});
-    for (int i=0;i<7;i++){
-        float uz = 575 + i*38.0f;
-        for (int k=0;k<3;k++)
-            addDecor(D_SPHERE, {240 + sinf(i*2.3f)*30.0f, 526.0f - k*12.0f, uz},
-                     {(46-k*11)*1.0f, 10.0f, (52-k*12)*1.0f},
+    // ---- seam 5: THE LAST WIND. Off the crown mill the easterly dies and a
+    // westward breath takes you: sail toward the hanging grove, catching two
+    // dying gusts on the way. The Bonewood has NO floor - it hangs over the
+    // whole realm, and so will you.
+    addUpdraft({192, 500, 514}, 6.5f, 48.0f, 26.0f);          // first dying gust
+    addUpdraft({152, 508, 524}, 6.5f, 48.0f, 26.0f);          // second, higher
+    addSkyPlat(166, 519, 504.0f, 2.4f);                       // one breath of stone between them
+    addCoin(196, 540, 516); addCoin(172, 543, 520); addCoin(140, 546, 526); addCoin(118, 543, 534);
+    {   // THE GATE OF BONES: a floating fossil disc holds the Springheart and
+        // the mouth of the Split Trunk. Beyond it, nothing but the climb.
+        addCyl({104, 538, 540}, 13, 2, S_SKYSTONE);
+        addDecor(D_CYL, {104, 539.9f, 540}, {13.2f, 0.16f, 13.2f}, (Color){205,199,215,255});   // slate cast
+        addDecor(D_CYL, {104, 537.4f, 540}, {13.5f, 0.7f, 13.5f}, (Color){205,196,176,255}, TX_FIBER);
+        for (int k=0;k<3;k++)                                  // under-lobes + hanging roots
+            addDecor(D_SPHERE, {104, 534.0f - k*7.0f, 540}, {(12.0f-k*3.4f), 6.0f, (12.5f-k*3.4f)},
                      ctint((Color){212,206,190,255}, 1.0f-k*0.08f), TX_FIBER);
+        for (int k=0;k<7;k++){
+            float a = k*0.9f;
+            addDecor(D_CYL, {104+sinf(a)*11.0f, 528.0f-(k%3)*3.0f, 540+cosf(a)*11.0f},
+                     {0.16f, frnd(5,9), 0.16f}, {96,74,46,255}, TX_FIBER);
+        }
+        for (int k=0;k<5;k++){                                 // rim shards
+            float a = k*1.257f + 0.4f;
+            addDecor(D_CONE, {104+sinf(a)*12.2f, 540, 540+cosf(a)*12.2f},
+                     {0.5f, frnd(1.2f,2.4f), 0.5f}, (Color){205,196,176,255}, TX_FIBER);
+        }
+        addFlag({110, 540, 548}, {228,222,205,255});           // zone flag: the grove
     }
-    for (int k=0;k<8;k++)                                     // grave-lights under the rim
-        addDecor(D_SPHERE, {168 + (k%2)*145.0f, 528.0f - (k%3)*6.0f, 570 + k*32.0f},
-                 {0.8f, 0.6f, 0.8f}, (Color){120,235,215,120});
+    // petrified titans adrift on their own torn-out roots, flanking the climb
+    {
+        float tx[3] = {70, 134, 66}, ty[3] = {540, 575, 610}, tz[3] = {480, 430, 395};
+        float th[3] = {26, 32, 22},  tr[3] = {4.2f, 5.0f, 3.6f};
+        for (int i=0;i<3;i++){
+            addDecor(D_CYL, {tx[i], ty[i]-2.2f, tz[i]}, {tr[i]*2.0f, 2.2f, tr[i]*2.0f}, (Color){205,196,176,255}, TX_FIBER);
+            addDecor(D_SPHERE, {tx[i], ty[i]-4.6f, tz[i]}, {tr[i]*1.5f, 3.4f, tr[i]*1.5f}, (Color){186,178,166,255}, TX_FIBER);
+            addDecor(D_CYL, {tx[i], ty[i], tz[i]}, {tr[i], th[i], tr[i]}, (Color){235,228,210,255}, TX_FIBER);
+            addDecor(D_SPHERE, {tx[i]+2, ty[i]+th[i]+tr[i]*0.3f, tz[i]},
+                     {tr[i]*2.7f, tr[i]*1.0f, tr[i]*2.7f}, (Color){206,198,180,255}, TX_STREAK);
+            addDecor(D_SPHERE, {tx[i], ty[i]+th[i]+1.0f, tz[i]}, {0.5f,0.36f,0.5f}, (Color){120,235,215,255});
+            for (int k=0;k<4;k++){
+                float a = k*1.57f + i;
+                addDecor(D_CYL, {tx[i]+cosf(a)*tr[i]*1.4f, ty[i]-9.0f-(k%2)*2.0f, tz[i]+sinf(a)*tr[i]*1.4f},
+                         {0.16f, 4.5f+(k%2)*1.5f, 0.16f}, {96,74,46,255}, TX_FIBER);
+            }
+        }
+    }
+    // deep mercy: two lone red caps far below the grove's fall lines - catch
+    // one and you've only lost the zone, not the realm
+    addCap(104, 494, 468.0f, 3.6f, true);
+    for (int k=0;k<3;k++)
+        addDecor(D_CYL, {104+sinf(k*2.1f)*1.6f, 461.0f-k*0.8f, 494+cosf(k*2.1f)*1.6f},
+                 {0.09f, 2.6f+k*0.8f, 0.09f}, {112,78,46,255});
+    addCap(104, 430, 436.0f, 3.6f, true);
+    for (int k=0;k<3;k++)
+        addDecor(D_CYL, {104+sinf(k*2.1f)*1.6f, 429.0f-k*0.8f, 430+cosf(k*2.1f)*1.6f},
+                 {0.09f, 2.6f+k*0.8f, 0.09f}, {112,78,46,255});
 
     // ---- drifting cloud banks stitch the bands together --------------------
     struct { float x,y,z; } cb[10] = {
@@ -1644,7 +1736,7 @@ static void BuildAscent(void){
     gBOff = OFF_SPORE;    BuildSporeway();
     gBOff = OFF_GORGE;    BuildGorge();
     gBOff = OFF_SKY;      BuildSkyhaven();
-    gBOff = OFF_BONE;     BuildBonewood();
+    gBOff = OFF_BONE;     gBFlip = true;  BuildBonewood();  gBFlip = false;
     gBOff = {0,0,0};
     BuildSeams();
     gMega = false;
@@ -1664,11 +1756,11 @@ static bool LoadLevelFile(int level);
 static void BuildWorld(int level = 0, bool forceCode = false){
     gLevel = level;
     solids.clear(); decor.clear(); gWebAnchors.clear(); gCoins.clear(); gSpores.clear();
-    gShrines.clear(); gMotes.clear();              // else they pile up every warp
+    gShrines.clear(); gMotes.clear(); gThunders.clear();   // else they pile up every warp
     gUpdrafts.clear(); gWindmills.clear(); gBanners.clear(); gPinwheels.clear();
     gAirWind = {0,0,0};
     gGrp = 0; gGrpDepth = 0; gWarpGrp = -1;
-    gBOff = {0,0,0}; gMega = false; gBakeDirty = true;
+    gBOff = {0,0,0}; gMega = false; gBFlip = false; gBakeDirty = true;
     if (level == 6){ gBndX = 340; gBndZ0 = -80; gBndZ1 = 850; }
     else           { gBndX = 215; gBndZ0 = -75; gBndZ1 = 275; }
     solids.reserve(level == 6? 2400 : 600); decor.reserve(level == 6? 8000 : 1400);

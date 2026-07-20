@@ -156,8 +156,13 @@ static void moveVert(float d){
                 if (s.bouncy && pl.vel.y < -2.0f){
                     float k = BOUNCE_K; int tier = 0;          // slam quality picks the spring
                     if (pl.slamming){
-                        tier = (pl.slamT <= SLAM_WIN)? 2 : 1;
-                        k = (tier == 2)? SLAM_K_PERF : SLAM_K_GOOD;
+                        if (gSlamCharges > 0){                 // a THUNDERSEED fuels the boing
+                            gSlamCharges--;
+                            tier = (pl.slamT <= SLAM_WIN)? 2 : 1;
+                            k = (tier == 2)? SLAM_K_PERF : SLAM_K_GOOD;
+                        } else {
+                            SND(sTick, 0.55f, 0.6f);           // dry click: out of thunder
+                        }
                         pl.slamming = false;
                     }
                     float out = clampf(-pl.vel.y*k, BOUNCE_MIN, BOUNCE_MAX);
@@ -354,22 +359,15 @@ static void PlayerUpdate(float dt, bool inputLocked){
         }
         return;
     }
-    // ---- slam & sail share SHIFT. Owning ONE keeps the legacy feel: SHIFT
-    // press = instant slam (Gorge), SHIFT hold = sail (Skyhaven). Owning BOTH:
-    // the press opens the sail at once, and releasing within SLAM_TAP converts
-    // it into the slam - tap to dive, hold to glide. E is always an instant
-    // slam. A slam always snaps the canopy shut; the two states never overlap
-    // (they used to, and slam gravity ate the sail - "the updraft is broken").
+    // ---- SHIFT (or E) = SLAM, held SPACE = SAIL. A clean key split - no more
+    // shared-key tap/hold dance. A slam snaps the canopy shut; the two states
+    // never overlap (they used to, and slam gravity ate the sail).
     pl.stunT = fmaxf(0.0f, pl.stunT - dt);
     bool shiftWasDown = gBotShiftPrev; gBotShiftPrev = gBotShift;
-    bool shiftDown     = (!inputLocked && IsKeyDown(KEY_LEFT_SHIFT))      || gBotShift;
-    bool shiftReleased = (!inputLocked && IsKeyReleased(KEY_LEFT_SHIFT))  || (shiftWasDown && !gBotShift);
-    bool shiftPressed  = (!inputLocked && IsKeyPressed(KEY_LEFT_SHIFT))   || (gBotShift && !shiftWasDown);
+    bool shiftPressed = (!inputLocked && IsKeyPressed(KEY_LEFT_SHIFT)) || (gBotShift && !shiftWasDown);
     bool slamNow = gBotSlam
         || (!inputLocked && gUnlockSlam && IsKeyPressed(KEY_E))
-        || (gUnlockSlam && !gUnlockSail && shiftPressed);
-    if (gUnlockSlam && gUnlockSail && pl.sailing && pl.sailT < SLAM_TAP && shiftReleased)
-        slamNow = true;                                  // the tap: cut the sail, tuck
+        || (gUnlockSlam && shiftPressed);
     if (slamNow && !pl.grounded && !pl.webSwinging && !pl.slamming && !pl.planting){
         pl.sailing = false; pl.sailT = 0;                // canopy snaps shut into the dive
         pl.slamming = true; pl.slamT = 0;
@@ -381,11 +379,14 @@ static void PlayerUpdate(float dt, bool inputLocked){
         pl.slamT += dt;
         if (pl.grounded) pl.slamming = false;
     }
-    // ---- skysail: hold SHIFT airborne to hang-glide
+    // ---- skysail: hold SPACE airborne to hang-glide. A charge in progress
+    // keeps SPACE for itself (the buffered-plant technique survives); only a
+    // FRESH airborne press unfurls the canopy.
     Vector3 sf = yawFwd(pl.yaw), sr = { -sf.z, 0, sf.x };
-    bool sailHeld = (gUnlockSail && shiftDown) || gBotSail;
-    if (sailHeld && !pl.grounded && !pl.webSwinging && !pl.planting && !pl.slamming && pl.stunT <= 0){
-        if (!pl.sailing){ pl.sailing = true; pl.sailT = 0; pl.charging = false; pl.pendT = 0; SND(sWhoosh, 0.7f, 0.45f); }
+    bool sailHeld = (!inputLocked && gUnlockSail && IsKeyDown(KEY_SPACE)) || gBotSail;
+    if (sailHeld && !pl.grounded && !pl.webSwinging && !pl.planting && !pl.slamming
+        && !pl.charging && pl.stunT <= 0){
+        if (!pl.sailing){ pl.sailing = true; pl.sailT = 0; pl.pendT = 0; SND(sWhoosh, 0.7f, 0.45f); }
         pl.sailT += dt;
     } else pl.sailing = false;
     if (pl.sailing){
@@ -433,8 +434,7 @@ static void PlayerUpdate(float dt, bool inputLocked){
     pl.kickBuf = fmaxf(0.0f, pl.kickBuf - dt);
     if (gUnlockWall && !pl.grounded && !pl.webSwinging && !pl.sailing
         && !pl.slamming && pl.stunT <= 0){
-        bool kp = (!inputLocked && (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)
-                                    || IsKeyPressed(KEY_SPACE))) || gBotKick;
+        bool kp = (!inputLocked && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) || gBotKick;
         if (kp) pl.kickBuf = 0.12f;
         if (pl.kickBuf > 0 && pl.wallT > 0){
             float fall = fmaxf(0.0f, -pl.vel.y);
@@ -453,9 +453,13 @@ static void PlayerUpdate(float dt, bool inputLocked){
             FX_WallSpring(pl.pos - n*0.5f, fall);
         }
     }
-    // ---- vault charge
+    // ---- vault charge. SPACE still charges - but once the sail is owned, a
+    // fresh AIRBORNE space press belongs to the canopy, so it only counts here
+    // on the ground, in coyote, or while a charge is already running.
+    bool spaceCharge = IsKeyDown(KEY_SPACE)
+                    && (!gUnlockSail || pl.grounded || pl.coyote > 0 || pl.charging);
     bool hold = !inputLocked && pl.stunT <= 0 && !pl.sailing
-             && (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsKeyDown(KEY_SPACE) || gBotHold);
+             && (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || spaceCharge || gBotHold);
     pl.vaultCD = fmaxf(0.0f, pl.vaultCD - dt);
     if (hold && !pl.charging && pl.vaultCD <= 0 && !pl.webSwinging){
         pl.charging = true; pl.chargeT = 0; pl.lastQuarter = 0;

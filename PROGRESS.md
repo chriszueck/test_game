@@ -1,6 +1,58 @@
 # ShroomVault — PROGRESS
 
-Updated: 2026-07-18 (late session)
+Updated: 2026-07-19
+
+## Latest session (post first full-clear playtest — 11:22 win, 28 falls)
+
+1. **Bonewood flipped + floorless.** Built z-mirrored (`gBFlip` in the leaf
+   adders) at OFF_BONE (104,540,530): the final climb runs SOUTH back over
+   the realm — every act overlooks (and can drop you into) what you already
+   climbed. No plateau: the Gate of Bones (floating fossil disc, r 13) holds
+   the Springheart + Split Trunk mouth; every trunk/pillar/stump hangs on its
+   own roots. Fall lines: trunk/silk → Skyhaven P0 (387) → gorge crown
+   plateau (374); drum/glide/ember/hollow/star → the open canyon (ledges
+   320–370, floor 310); two deep mercy reds at 468/436 on the axis; two more
+   catches at route level. Star now at (112, 672.6, 362) — 360 m of open air
+   above the gorge river.
+2. **Seam 5 reworked**: bone bridge gone. Above 535 m the easterly DIES and
+   a westward "last wind" (−0.9,−0.35) takes over; sail off the crown mill
+   through two dying-gust updrafts (+ one rest plat) to the Gate. Floating
+   petrified-titan isles flank the grove.
+3. **THUNDERSEEDS**: the slam's amplified bounce is now ammo. Storm-fruit
+   pickups (amount shown as bolt cones on the item, amber pips under the
+   crosshair, cap 9, 7 s regrow) grow on every gorge diving board (2–3 each),
+   at the mouth (3), the crown (2), and on Bonewood's P2 for the Drum (2).
+   Slam-bouncing a red spends one; empty = plain bounce + dry click. The dive
+   itself stays free. Kills the k>1 red-cap farm that let slam cheese every
+   earlier zone. Serialized in level files; editor group-ops cover them.
+4. **Controls**: SAIL moved to held SPACE (fresh airborne press = canopy;
+   grounded/coyote/mid-charge SPACE still charges the vault; LMB unchanged).
+   SHIFT (or E) = instant SLAM always — the tap/hold disambiguation is gone
+   (SLAM_TAP removed). Wallspring is LMB-only now.
+5. **Unlock cinematics keep momentum**: the cine branch runs
+   PlayerUpdate(dt, input-locked) instead of zeroing velocity — the power
+   flows in around your flight, in slow-mo.
+6. **Air thins with altitude**: fog density lerps 0.0022 → 0.0011 by 580 m,
+   so the floorless finale genuinely overlooks the realm (canyon floor
+   readable 370 m below the star).
+
+## Verification status (this session)
+
+- `--edcheck` PASS: roundtrips 0–6 (thunderseeds serialize), editor ops, 10
+  seam probes incl. wind-rest plat (504), bone-gate (540), star-cap at the
+  new (112,·,362) — all OK; 16 updrafts, 4 shrines.
+- `--demo` PASS: SPACEHOLD=SAIL (gBotSail geyser glide 65.9→77.6, no slam);
+  SHIFT=SLAM (press converts in 0.01 s, drum PERFECT apex 59.4, 3 seeds
+  granted → thunderLeft=2 — exactly one spent).
+- `--perf` (cold run): 55–145 fps; worst are P0 (57) and bone-gate (55).
+  Back-to-back runs throttle ~25% on this machine — measure cold.
+- Boots clean with the completed-run save (resume=0 → meadow, powers kept).
+- **Needs a human hand:** the last-wind crossing feel (two gusts, westward
+  breath), Drum thunder economy (2 seeds + 7 s regrow), whether deep-fall
+  recovery onto P0/gorge-crown/canyon reads as fair, SPACE-sail muscle-memory
+  after a week of SHIFT.
+
+## Older state (2026-07-18)
 
 ## Current state
 

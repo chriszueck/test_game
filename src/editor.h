@@ -87,6 +87,7 @@ static int GrpCount(int g){
     for (auto& e : gBanners)    if (e.grp==g) n++;
     for (auto& e : gPinwheels)  if (e.grp==g) n++;
     for (auto& e : gMotes)      if (e.grp==g) n++;
+    for (auto& e : gThunders)   if (e.grp==g) n++;
     return n;
 }
 static void GrpMove(int g, Vector3 d){
@@ -101,6 +102,7 @@ static void GrpMove(int g, Vector3 d){
     for (auto& e : gBanners)    if (e.grp==g) e.top  = e.top  + d;
     for (auto& e : gPinwheels)  if (e.grp==g) e.pos  = e.pos  + d;
     for (auto& e : gMotes)      if (e.grp==g) e.p    = e.p    + d;
+    for (auto& e : gThunders)   if (e.grp==g) e.p    = e.p    + d;
     if (g == gWarpGrp) gWarpTop = gWarpTop + d;    // the warp trigger travels with its pipe
 }
 // scale about the group's footprint center at its lowest point (a mushroom
@@ -123,6 +125,7 @@ static bool GrpBounds(int g, Vector3* mn, Vector3* mx){
     for (auto& e : gBanners)    if (e.grp==g) acc(e.top, e.top);
     for (auto& e : gPinwheels)  if (e.grp==g) acc(e.pos, e.pos);
     for (auto& e : gMotes)      if (e.grp==g) acc(e.p, e.p);
+    for (auto& e : gThunders)   if (e.grp==g) acc(e.p, e.p);
     return any;
 }
 static void GrpScale(int g, float k){
@@ -147,6 +150,7 @@ static void GrpScale(int g, float k){
     for (auto& e : gBanners)    if (e.grp==g){ e.top = sp(e.top); e.len *= k; e.w *= k; }
     for (auto& e : gPinwheels)  if (e.grp==g){ e.pos = sp(e.pos); e.rad *= k; }
     for (auto& e : gMotes)      if (e.grp==g){ e.p = sp(e.p); e.r *= k; }
+    for (auto& e : gThunders)   if (e.grp==g) e.p = sp(e.p);
 }
 static void GrpDelete(int g){
     auto rmS = [&](std::vector<Solid>& v){ v.erase(std::remove_if(v.begin(), v.end(),
@@ -162,6 +166,7 @@ static void GrpDelete(int g){
     gBanners.erase(std::remove_if(gBanners.begin(), gBanners.end(), [&](const Banner& e){ return e.grp==g; }), gBanners.end());
     gPinwheels.erase(std::remove_if(gPinwheels.begin(), gPinwheels.end(), [&](const Pinwheel& e){ return e.grp==g; }), gPinwheels.end());
     gMotes.erase(std::remove_if(gMotes.begin(), gMotes.end(), [&](const Mote& e){ return e.grp==g; }), gMotes.end());
+    gThunders.erase(std::remove_if(gThunders.begin(), gThunders.end(), [&](const Thunder& e){ return e.grp==g; }), gThunders.end());
 }
 static int GrpDuplicate(int g, Vector3 off){
     int ng = ++gGrp;
@@ -177,6 +182,7 @@ static int GrpDuplicate(int g, Vector3 off){
     n = gBanners.size();    for (size_t i=0;i<n;i++) if (gBanners[i].grp==g){ Banner e=gBanners[i]; e.grp=ng; e.top=e.top+off; gBanners.push_back(e); }
     n = gPinwheels.size();  for (size_t i=0;i<n;i++) if (gPinwheels[i].grp==g){ Pinwheel e=gPinwheels[i]; e.grp=ng; e.pos=e.pos+off; gPinwheels.push_back(e); }
     n = gMotes.size();      for (size_t i=0;i<n;i++) if (gMotes[i].grp==g){ Mote e=gMotes[i]; e.grp=ng; e.p=e.p+off; gMotes.push_back(e); }
+    n = gThunders.size();   for (size_t i=0;i<n;i++) if (gThunders[i].grp==g){ Thunder e=gThunders[i]; e.grp=ng; e.p=e.p+off; gThunders.push_back(e); }
     return ng;
 }
 
